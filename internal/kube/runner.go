@@ -17,6 +17,16 @@ type Runner struct {
 	Bin        string
 	Kubeconfig string
 	Timeout    time.Duration
+	Protect    *Protect
+}
+
+// Command is a parsed, checked kubectl invocation.
+type Command struct {
+	Args  []string
+	Pipes []string
+	Risk  Risk
+	// Confirm is true when approval is needed even in auto-approve mode.
+	Confirm bool
 }
 
 func NewRunner(kubeconfig string) *Runner {
@@ -174,20 +184,25 @@ func capOutput(s string) string {
 	return s[:MaxOutput] + "\n[output truncated]"
 }
 
-// Args parses a command line into checked kubectl args plus any grep pipes.
-func Args(cmdline string) (args []string, pipes []string, err error) {
+// Parse splits a command line and runs every safety check on it.
+func (r *Runner) Parse(cmdline string) (*Command, error) {
 	segs := splitPipes(cmdline)
-	args, err = Split(segs[0])
+	args, err := Split(segs[0])
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(args) > 0 && args[0] == "kubectl" {
 		args = args[1:]
 	}
 	if err = Check(args); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return args, segs[1:], nil
+	if r.Protect != nil {
+		if err = r.Protect.Check(args); err != nil {
+			return nil, err
+		}
+	}
+	return &Command{Args: args, Pipes: segs[1:], Risk: Classify(args), Confirm: AlwaysConfirm(args)}, nil
 }
 
 // Exec runs already-approved args and applies the pipes.
@@ -209,7 +224,11 @@ func (r *Runner) Exec(ctx context.Context, args, pipes []string) (string, error)
 		}
 		return "", errors.New(msg)
 	}
-	out, err := applyPipes(stdout.String(), pipes)
+	raw := stdout.String()
+	if r.Protect != nil {
+		raw = r.Protect.FilterTable(raw)
+	}
+	out, err := applyPipes(raw, pipes)
 	if err != nil {
 		return "", err
 	}

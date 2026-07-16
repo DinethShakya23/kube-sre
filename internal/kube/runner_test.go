@@ -32,16 +32,35 @@ func TestSplit(t *testing.T) {
 	}
 }
 
-func TestArgsAndPipes(t *testing.T) {
-	args, pipes, err := Args("kubectl get pods -A | grep -i crash | grep -v ok")
+func TestParse(t *testing.T) {
+	r := &Runner{Protect: &Protect{Namespaces: set("kube-system"), Resources: set("secrets")}}
+	c, err := r.Parse("kubectl get pods -A | grep -i crash | grep -v ok")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(args, " ") != "get pods -A" || len(pipes) != 2 {
-		t.Errorf("args=%v pipes=%v", args, pipes)
+	if strings.Join(c.Args, " ") != "get pods -A" || len(c.Pipes) != 2 || c.Risk != RiskNone {
+		t.Errorf("cmd=%+v", c)
 	}
-	if _, _, err := Args("get pods; rm -rf /"); err == nil {
-		t.Error("metachar must be rejected")
+	c, _ = r.Parse("delete namespace demo")
+	if c.Risk != RiskHigh || !c.Confirm {
+		t.Errorf("delete namespace should be high and confirm: %+v", c)
+	}
+	for _, bad := range []string{"get pods; rm -rf /", "get pods -n kube-system", "get secrets"} {
+		if _, err := r.Parse(bad); err == nil {
+			t.Errorf("%q should be rejected", bad)
+		}
+	}
+}
+
+func TestExecFiltersProtectedRows(t *testing.T) {
+	r := fakeKubectl(t, `printf 'NAMESPACE NAME
+kube-system dns
+prod web
+'`)
+	r.Protect = &Protect{Namespaces: set("kube-system")}
+	out, err := r.Exec(context.Background(), []string{"get", "pods", "-A"}, nil)
+	if err != nil || strings.Contains(out, "dns") || !strings.Contains(out, "web") {
+		t.Errorf("out=%q err=%v", out, err)
 	}
 }
 
