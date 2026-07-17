@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,6 +29,13 @@ type Config struct {
 	SmallModel   string
 
 	DatabaseURL string
+	PGHost      string
+	PGPort      string
+	PGDatabase  string
+	PGUser      string
+	PGPassword  string
+	PGPoolMin   int
+	PGPoolMax   int
 	UseSQLite   bool
 	SQLitePath  string
 
@@ -102,6 +110,13 @@ func Load(getenv func(string) string) *Config {
 		SmallModel:   str("ANTHROPIC_SMALL_MODEL", "claude-haiku-4-5-20251001"),
 
 		DatabaseURL: str("DATABASE_URL", ""),
+		PGHost:      str("POSTGRES_HOST", ""),
+		PGPort:      str("POSTGRES_PORT", "5432"),
+		PGDatabase:  str("POSTGRES_DB", "kube-sre"),
+		PGUser:      str("POSTGRES_USER", "kube-sre"),
+		PGPassword:  str("POSTGRES_PASSWORD", "password"),
+		PGPoolMin:   num("POSTGRES_POOL_MIN_CONN", 1),
+		PGPoolMax:   num("POSTGRES_POOL_MAX_CONN", 10),
 		UseSQLite:   boolean("USE_SQLITE", false),
 		SQLitePath:  str("SQLITE_PATH", filepath.Join(home, ".kube-sre", "kube-sre.db")),
 
@@ -135,6 +150,28 @@ func Load(getenv func(string) string) *Config {
 	res := lower(list(str("KUBECTL_BLOCKED_RESOURCES", strings.Join(alwaysBlocked, ","))))
 	c.BlockedResources = toSet(append(spellings(res), alwaysBlocked...))
 	return c
+}
+
+// Postgres reports whether the server should use Postgres instead of SQLite.
+func (c *Config) Postgres() bool {
+	if c.UseSQLite {
+		return false
+	}
+	return c.DatabaseURL != "" || c.PGHost != ""
+}
+
+// DSN returns the Postgres connection string.
+func (c *Config) DSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.PGUser, c.PGPassword),
+		Host:   c.PGHost + ":" + c.PGPort,
+		Path:   "/" + c.PGDatabase,
+	}
+	return u.String()
 }
 
 // OpenAccess reports whether no auth keys are configured at all.

@@ -69,3 +69,24 @@ func TestBadNumbersFallBack(t *testing.T) {
 		t.Error("bad numbers should fall back to defaults")
 	}
 }
+
+func TestDatabaseChoice(t *testing.T) {
+	if Load(env(nil)).Postgres() {
+		t.Error("nothing set means sqlite")
+	}
+	c := Load(env(map[string]string{"POSTGRES_HOST": "db", "POSTGRES_PASSWORD": "p@ss word"}))
+	if !c.Postgres() {
+		t.Error("host set means postgres")
+	}
+	if got := c.DSN(); got != "postgres://kube-sre:p%40ss%20word@db:5432/kube-sre" {
+		t.Errorf("dsn=%s", got)
+	}
+	c = Load(env(map[string]string{"POSTGRES_HOST": "db", "USE_SQLITE": "true"}))
+	if c.Postgres() {
+		t.Error("USE_SQLITE wins")
+	}
+	c = Load(env(map[string]string{"DATABASE_URL": "postgres://x/y"}))
+	if !c.Postgres() || c.DSN() != "postgres://x/y" {
+		t.Error("database url should win")
+	}
+}
