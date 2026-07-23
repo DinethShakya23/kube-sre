@@ -92,3 +92,29 @@ func TestExecErrorSurfacesStderr(t *testing.T) {
 		t.Errorf("err=%v", err)
 	}
 }
+
+func TestExecAddsHintOnlyWhenEnabled(t *testing.T) {
+	r := fakeKubectl(t, `echo 'Error from server (Forbidden): nope' >&2; exit 1`)
+	_, err := r.Exec(context.Background(), []string{"get", "pods"}, nil)
+	if err == nil || strings.Contains(err.Error(), "->") {
+		t.Fatalf("no hint expected, got %v", err)
+	}
+	r.Hints = true
+	_, err = r.Exec(context.Background(), []string{"get", "pods"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "Forbidden") || !strings.Contains(err.Error(), "->") {
+		t.Fatalf("want original plus hint, got %v", err)
+	}
+}
+
+func TestExecExitOneIsAnswerForDiffAndCanI(t *testing.T) {
+	r := fakeKubectl(t, `echo 'no'; exit 1`)
+	for _, args := range [][]string{{"diff", "-f", "x.yaml"}, {"auth", "can-i", "delete", "pods"}} {
+		out, err := r.Exec(context.Background(), args, nil)
+		if err != nil || !strings.Contains(out, "no") {
+			t.Errorf("%v: out=%q err=%v", args, out, err)
+		}
+	}
+	if _, err := r.Exec(context.Background(), []string{"get", "pods"}, nil); err == nil {
+		t.Error("plain get with exit 1 stays an error")
+	}
+}

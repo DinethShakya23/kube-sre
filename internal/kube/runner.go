@@ -18,6 +18,7 @@ type Runner struct {
 	Kubeconfig string
 	Timeout    time.Duration
 	Protect    *Protect
+	Hints      bool
 }
 
 // Command is a parsed, checked kubectl invocation.
@@ -218,11 +219,17 @@ func (r *Runner) Exec(ctx context.Context, args, pipes []string) (string, error)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
+		var ee *exec.ExitError
+		if !(errors.As(err, &ee) && ee.ExitCode() == 1 && exitIsAnswer(args)) {
+			msg := strings.TrimSpace(stderr.String())
+			if msg == "" {
+				msg = err.Error()
+			}
+			if r.Hints {
+				msg, _ = Annotate(msg)
+			}
+			return "", errors.New(msg)
 		}
-		return "", errors.New(msg)
 	}
 	raw := stdout.String()
 	if r.Protect != nil {
@@ -233,4 +240,16 @@ func (r *Runner) Exec(ctx context.Context, args, pipes []string) (string, error)
 		return "", err
 	}
 	return capOutput(out), nil
+}
+
+// exitIsAnswer: `diff` exits 1 when there are differences and
+// `auth can-i` exits 1 for "no". Both are results, not failures.
+func exitIsAnswer(args []string) bool {
+	switch Verb(args) {
+	case "diff":
+		return true
+	case "auth":
+		return len(args) > 1 && strings.Contains(strings.Join(args, " "), "can-i")
+	}
+	return false
 }
