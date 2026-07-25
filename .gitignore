@@ -2,3 +2,4 @@ bin/
 *.db
 .env
 .DS_Store
+/kube-sre

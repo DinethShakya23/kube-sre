@@ -90,3 +90,14 @@ func TestDatabaseChoice(t *testing.T) {
 		t.Error("database url should win")
 	}
 }
+
+func TestSensoriumSettings(t *testing.T) {
+	c := Load(env(nil))
+	if !c.Sensorium || c.SensoriumQueueSize != 10000 || len(c.SensoriumNamespaces) != 0 {
+		t.Errorf("defaults: %+v", c)
+	}
+	c = Load(env(map[string]string{"SENSORIUM_WATCH_NAMESPACES": " a, b ,", "SENSORIUM_ENABLED": "false"}))
+	if c.Sensorium || len(c.SensoriumNamespaces) != 2 || c.SensoriumNamespaces[1] != "b" {
+		t.Errorf("set: %+v", c)
+	}
+}

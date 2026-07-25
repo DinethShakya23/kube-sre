@@ -62,6 +62,9 @@ type Config struct {
 	InvestigationPlan     bool
 	Playbooks             bool
 	GraphRecursionLimit   int
+	Sensorium             bool
+	SensoriumQueueSize    int
+	SensoriumNamespaces   []string
 	CoordinatorRecursions int
 }
 
@@ -141,6 +144,9 @@ func Load(getenv func(string) string) *Config {
 		InvestigationPlan:     boolean("INVESTIGATION_PLAN_ENABLED", true),
 		Playbooks:             boolean("PLAYBOOKS_ENABLED", true),
 		GraphRecursionLimit:   num("AGENT_GRAPH_RECURSION_LIMIT", 120),
+		Sensorium:             boolean("SENSORIUM_ENABLED", true),
+		SensoriumQueueSize:    num("SENSORIUM_QUEUE_MAXSIZE", 10000),
+		SensoriumNamespaces:   list(str("SENSORIUM_WATCH_NAMESPACES", "")),
 		CoordinatorRecursions: num("AGENT_COORDINATOR_RECURSION_LIMIT", 150),
 	}
 
