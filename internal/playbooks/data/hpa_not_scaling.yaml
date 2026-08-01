@@ -1,0 +1,26 @@
+name: HPANotScaling
+detect:
+  watch_predicates:
+    - kind: Event
+      involved_kind: HorizontalPodAutoscaler
+      reason_regex: "^(FailedGetResourceMetric|FailedComputeMetricsReplicas)$"
+  promql:
+    - >-
+      kube_horizontalpodautoscaler_status_condition{condition="ScalingActive",status="false"} == 1
+  debounce_seconds: 60
+triggers:
+  - event_reason_regex: "FailedGetResourceMetric|FailedComputeMetricsReplicas"
+  - event_message_regex: "pods.metrics.k8s.io|missing request for cpu"
+investigation_steps:
+  - "kubectl describe hpa <hpa> -n <ns> and read the conditions and messages."
+  - "kubectl get apiservice v1beta1.metrics.k8s.io to check the metrics API is registered and healthy."
+  - "kubectl get deployment <target> -n <ns> -o yaml and check each container for resources.requests.cpu."
+  - "Decide which it is: no metrics API, or no CPU or memory requests on the workload."
+expected_evidence:
+  - "The apiservice v1beta1.metrics.k8s.io is missing or unavailable"
+  - "The target container has no resources.requests.cpu"
+  - "If the apiservice is fine and requests exist, this is the wrong diagnosis. Read the ScalingActive message first."
+recommended_fix_template: |
+  HPA <HPA_NAME> in <NS> cannot compute its metrics. Apply the fix for the cause found:
+  - Cluster wide: the metrics API is missing, so deploy or restart metrics-server.
+  - Workload only: deployment <DEPLOYMENT_NAME> lacks resources.requests.cpu, so add it.

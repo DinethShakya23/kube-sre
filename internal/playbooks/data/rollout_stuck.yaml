@@ -1,0 +1,45 @@
+name: DeploymentRolloutStuck
+detect:
+  watch_predicates:
+    - kind: Event
+      reason_regex: "^ProgressDeadlineExceeded$"
+      involved_kind: Deployment
+    - kind: Event
+      reason_regex: "^ReplicaSetUpdated$"
+      message_regex: "ProgressDeadlineExceeded|progress deadline exceeded"
+      involved_kind: Deployment
+  promql:
+    - >-
+      kube_deployment_status_condition{condition="Progressing", status="false"} == 1
+    - >-
+      kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+  debounce_seconds: 600
+triggers:
+  - event_reason_regex: "ProgressDeadlineExceeded"
+  - event_message_regex: "ProgressDeadlineExceeded|progress deadline exceeded|replica.*failed.*progress"
+investigation_steps:
+  - "kubectl rollout status deployment/<deploy> -n <ns> --timeout=30s to confirm it never completes."
+  - "kubectl describe deployment <deploy> -n <ns> and check for Progressing=False with reason ProgressDeadlineExceeded."
+  - "kubectl get replicaset -n <ns> --sort-by=.metadata.creationTimestamp and check the old and new sets both have replicas."
+  - "kubectl get pods -n <ns> -o wide and look at the new pods. They are often Pending, ImagePullBackOff, CrashLoopBackOff or not Ready."
+  - "kubectl describe pod <new-pod> -n <ns> to see why it never became Ready. This usually leads to another playbook."
+  - "kubectl get events -n <ns> --sort-by=.lastTimestamp to see the downstream cause and whether it is still moving."
+expected_evidence:
+  - "Progressing=False with reason ProgressDeadlineExceeded"
+  - "Two ReplicaSets with replicas: the old one still serving and the new one never ready"
+  - "New pods that are Pending or not Ready, with scheduling, mount, pull or probe events"
+  - "If there is no ProgressDeadlineExceeded and one ReplicaSet is at full size, the rollout is not stuck. Look at ImagePullBackOff, PendingSchedulingConstraints or ReadinessProbeFailing."
+recommended_fix_template: |
+  Deployment <DEPLOY> in <NS> passed its progressDeadlineSeconds. The new ReplicaSet never
+  became Available, and the old one is still serving.
+
+  1. Do not force delete pods. Fix the cause seen on the new pod first:
+     - Pending with FailedScheduling: fix the scheduling limits (see the Pending playbooks).
+     - ImagePullBackOff or ErrImagePull: fix the image, tag or pull secret.
+     - Readiness failures: fix the probe path or port, or raise initialDelaySeconds.
+  2. Once a pod can become Ready, resume:
+     kubectl rollout restart deployment/<deploy> -n <ns>
+     kubectl rollout status deployment/<deploy> -n <ns> --timeout=120s
+  3. If the change itself is bad, roll back: kubectl rollout undo deployment/<deploy> -n <ns>
+
+  This playbook only describes the fix. Nothing is applied automatically.

@@ -1,0 +1,29 @@
+name: NetworkPolicyBlocking
+# A policy drop is silent: the packet is discarded in the CNI and the API server
+# records no event. There is nothing to compile into a watch predicate.
+detect: null
+triggers:
+  - event_message_regex: "connection timed out|i/o timeout|dial tcp.*timeout"
+investigation_steps:
+  - "kubectl get networkpolicy -n <ns>. A policy selecting the destination pods is needed. If there is none, this playbook does not apply."
+  - "kubectl describe networkpolicy <policy> -n <ns> and read podSelector, policyTypes and rules. An empty `ingress: []` with policyTypes Ingress is a deny all."
+  - "kubectl get pods -n <ns> --show-labels to see whether the destination matches the podSelector and the source matches any `from` selector."
+  - "kubectl get svc,endpoints -n <ns>. Empty endpoints point to ServiceNoEndpoints, not a policy."
+  - "Check the source namespace as well. An egress rule there blocks the connection just like an ingress rule."
+  - "A policy drop hangs and times out. 'Connection refused' means a reply came back, so look elsewhere."
+expected_evidence:
+  - "Destination pods are Running and Ready and the Service has endpoints"
+  - "DNS resolves, but the connection hangs and times out"
+  - "A NetworkPolicy selects the destination and has no rule admitting the source"
+  - "No Warning event mentions it. Here the missing events are the signal."
+recommended_fix_template: |
+  Traffic to <DEST> in <NS> is dropped by NetworkPolicy <POLICY>, which selects the
+  destination but has no rule for <SOURCE>.
+
+  Add the narrowest rule that lets the caller through, scoped to a pod or namespace
+  selector and a port. Never use an empty selector, which admits the whole cluster:
+
+    kubectl edit networkpolicy <POLICY> -n <NS>
+
+  If the caller is in another namespace, that namespace must also allow the egress.
+  Retry after the change. It should succeed or fail fast instead of hanging.

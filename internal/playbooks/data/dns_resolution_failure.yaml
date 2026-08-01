@@ -1,0 +1,28 @@
+name: DnsResolutionFailure
+# DNS failures show up in app logs and CoreDNS logs. The pod stays Running and
+# no Warning event is written, so the watch stream has nothing to match.
+detect: null
+triggers:
+  - event_message_regex: "no such host|Temporary failure in name resolution|dial tcp.*lookup|SERVFAIL|NXDOMAIN|server can't find"
+investigation_steps:
+  - "kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide. If CoreDNS is not Running and Ready, the resolver itself is down."
+  - "kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50 and look for SERVFAIL or upstream timeouts."
+  - "kubectl get svc kube-dns -n kube-system, then kubectl get endpoints kube-dns -n kube-system to confirm it has backends."
+  - "kubectl get pod <app-pod> -n <ns> -o yaml and check dnsPolicy and dnsConfig. ClusterFirst is the default. None means the pod owns its resolv.conf."
+  - "kubectl get networkpolicy -A. An egress policy that does not allow port 53 to kube-dns looks like a dead resolver."
+  - "Probe from inside: kubectl run dns-probe --image=busybox:1.36 --restart=Never --rm -i -- nslookup kubernetes.default.svc.cluster.local. If it fails too the problem is cluster wide, if not it is local to the workload."
+expected_evidence:
+  - "CoreDNS pods not Ready, or CoreDNS logs with SERVFAIL or upstream timeouts"
+  - "The kube-dns Service has no ready endpoints"
+  - "The workload sets dnsPolicy None, or dnsConfig with unreachable nameservers"
+  - "A NetworkPolicy that drops traffic to port 53"
+  - "If all of the above are fine, look at the Corefile upstreams and the node resolv.conf"
+recommended_fix_template: |
+  Pod <APP_POD> in <NS> cannot resolve cluster DNS. The cause looks like <CAUSE>:
+  - CoreDNS down: restore it (rollout restart of coredns, or fix what stops the pods).
+  - kube-dns Service broken: fix the selector so it matches the coredns pods.
+  - Wrong dnsPolicy or dnsConfig: put the pod back to ClusterFirst or fix the nameservers.
+  - NetworkPolicy on port 53: add an egress rule to kube-dns, scoped to the namespace.
+  - Bad upstream: adjust the Corefile forward block or the node resolv.conf.
+
+  Nothing here runs by itself. Show the operator the step and let approval decide.

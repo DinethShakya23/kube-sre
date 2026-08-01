@@ -1,0 +1,24 @@
+name: TerminatingStuck
+detect:
+  # Stuck means Terminating long past any normal grace period and never removed.
+  # The key arms on the status and fires only if it persists for the debounce.
+  # A DELETED watch event disarms it, so ordinary churn does not fire. 600s is far
+  # past the default 30s grace, so only truly stuck pods get through.
+  watch_predicates:
+    - kind: Pod
+      status_regex: "^Terminating$"
+  debounce_seconds: 600
+triggers:
+  - pod_status_regex: "Terminating"
+investigation_steps:
+  - "kubectl get pod <pod> -n <ns> -o yaml and read metadata.finalizers and deletionTimestamp."
+  - "kubectl describe pod <pod> -n <ns> for shutdown hooks that block termination."
+  - "kubectl get events -n <ns> --sort-by=.lastTimestamp for finalizer or controller errors."
+expected_evidence:
+  - "deletionTimestamp is set but the pod is still Terminating"
+  - "A non empty metadata.finalizers list"
+  - "A controller that fails to remove a finalizer"
+recommended_fix_template: |
+  The pod is stuck in Terminating. Suggested fix: <ACTION>, such as clearing the blocking
+  finalizer, stopping the lingering process, or as a last resort
+  `kubectl delete pod <pod> --grace-period=0 --force`.

@@ -1,0 +1,22 @@
+name: CommandHardcodedFailure
+detect: null
+triggers:
+  - pod_status_regex: "CrashLoopBackOff|Error"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns> and read the command and args of each container."
+  - "If the command ends in `exit N` (N not 0) or runs `false`, the failure is written into the spec. It is not a missing dependency."
+  - "For a one-liner such as `sh -c \"echo x; exit N\"`, no env or secret change can help. The spec has to change."
+expected_evidence:
+  - "The container command ends with `exit N` where N is not 0"
+  - "The Last State exit code matches that value"
+recommended_fix_template: |
+  Container <CONTAINER> in pod <POD> has a command that always fails (exit <CODE>).
+  Env vars, ConfigMaps and Secrets cannot change that. Replace the command with a
+  real entrypoint.
+
+  To apply it, do not use `kubectl patch --type=json` (the JSON body has shell
+  characters that the command guard rejects). Instead:
+    1. kubectl get deployment <DEP> -n <NS> -o yaml
+    2. Write the corrected manifest with a valid command, for example
+       ["sh", "-c", "echo starting; sleep infinity"].
+    3. kubectl apply -f - with the manifest on stdin.

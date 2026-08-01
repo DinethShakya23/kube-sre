@@ -1,0 +1,32 @@
+name: PodDisruptionBudgetBlocking
+# A refused eviction is an API answer or drain stderr, not a guaranteed Warning
+# event. Zero allowed disruptions alone is normal availability policy, so this
+# stays triage only.
+detect: null
+triggers:
+  - event_message_regex: "Cannot evict pod as it would violate the pod's disruption budget"
+  - event_message_regex: 'pdb .*prevents pod evictions'
+investigation_steps:
+  - "Confirm a real eviction was refused. Record the refusal text, the pod, namespace and node. A budget with zero allowed disruptions is not an incident by itself."
+  - "kubectl get pdb -n <ns> -o yaml and read selector, minAvailable or maxUnavailable, currentHealthy, desiredHealthy, disruptionsAllowed and conditions. If access is denied, say what evidence is missing."
+  - "kubectl get pods -n <ns> --show-labels -o wide and match the pod against every budget selector, including matchExpressions. An empty selector matches all pods in the namespace."
+  - "kubectl describe pod <pod> -n <ns> and check readiness, owners and termination state. Unready replacements can use up the budget."
+  - "kubectl get deployment,statefulset,replicaset -n <ns> and compare desired and ready replicas. Find out why replacements are not Ready before touching the budget."
+  - "kubectl get events -n <ns> for scheduling or readiness failures on the blocked workload. Do not rerun a drain just to get evidence."
+  - "Keep the exact server response. A 429 alone can be throttling, and overlapping selectors give a different error."
+expected_evidence:
+  - "A voluntary eviction refused with a budget specific message, and the pod matches that budget's selector"
+  - "Budget status and pod readiness explain the refusal. For a healthy pod, disruptionsAllowed is zero."
+  - "The owner and availability need are known. Zero allowed may be intended, for example one replica with minAvailable 1."
+  - "If the error has no budget cause, the status is stale or the pod matches no budget, do not blame the budget"
+recommended_fix_template: |
+  Eviction of <POD> in <NS> is blocked by <PDB>, shown by <REFUSAL> and <CURRENT_STATUS>.
+  The budget protects <AVAILABILITY_REQUIREMENT>.
+  Prefer to restore unhealthy replicas or add capacity and wait for more Ready replicas
+  before retrying. A single replica with zero budget may need a maintenance window from
+  its owner. That is not automatically a misconfiguration.
+
+  If the policy must change, get the owner to agree first. Any scale, policy edit or drain
+  retry goes through the normal dry run and approval step. Do not delete the budget, delete
+  pods directly, or use drain --disable-eviction. After an approved change, recheck the
+  Ready replicas and the budget status and confirm the eviction goes through.

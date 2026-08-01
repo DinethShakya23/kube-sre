@@ -1,0 +1,29 @@
+name: CrashLoopBackOff
+detect:
+  watch_predicates:
+    # Anchored so the init-container variant stays with InitContainerFailing.
+    - kind: Pod
+      status_regex: "^CrashLoopBackOff$"
+    - kind: Event
+      reason_regex: "^BackOff$"
+      message_regex: "Back-off restarting failed container"
+      involved_kind: Pod
+  promql:
+    - 'kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1'
+    - 'increase(kube_pod_container_status_restarts_total[10m]) > 3'
+  debounce_seconds: 60
+triggers:
+  - pod_status_regex: "CrashLoopBackOff"
+  - event_reason_regex: "BackOff"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns> and read Last State for the exit code and reason."
+  - "kubectl logs <pod> -n <ns> --previous --tail=50 to see the output of the last crashed run."
+  - "kubectl get events -n <ns> --sort-by=.lastTimestamp to confirm the restart sequence."
+expected_evidence:
+  - "Exit code and reason in Last State"
+  - "A fatal error or stack trace in the previous run's logs"
+  - "Repeated BackOff events for the pod"
+recommended_fix_template: |
+  The container keeps exiting at startup. From exit code <CODE> and the log
+  excerpt the likely cause is <CAUSE>. Suggested fix: <ACTION>, for example a
+  missing env var, a bad command, or a probe that fires too early.

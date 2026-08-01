@@ -1,0 +1,40 @@
+name: CreateContainerConfigError
+detect:
+  watch_predicates:
+    - kind: Pod
+      status_regex: "CreateContainerConfigError|CreateContainerError"
+    - kind: Event
+      reason_regex: "^Failed$"
+      message_regex: "couldn't find key|not found in Secret|not found in ConfigMap|secret .* not found|configmap .* not found"
+      involved_kind: Pod
+  promql:
+    - 'kube_pod_container_status_waiting_reason{reason=~"CreateContainerConfigError|CreateContainerError"} == 1'
+  debounce_seconds: 60
+triggers:
+  - pod_status_regex: "CreateContainerConfigError|CreateContainerError"
+  - event_reason_regex: "Failed"
+  - event_message_regex: "couldn't find key|not found in Secret|not found in ConfigMap"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns>. The kubelet event usually names the exact missing key and the Secret or ConfigMap."
+  - "List the keys the Secret or ConfigMap really has (names only, never values)."
+  - "kubectl get pod <pod> -n <ns> -o jsonpath='{.spec.containers[*].env}' to list every key the pod asks for."
+  - "Compare the two lists. Most often the pod spec is wrong (typo or stale reference). Say the object is missing a key only if the deployment clearly needs it."
+  - "The container never started, so there are no logs. The answer is in the event, the spec and the key comparison."
+expected_evidence:
+  - "A kubelet event naming the missing key and the Secret or ConfigMap"
+  - "The keys present in the referenced object"
+  - "The keys the pod spec requests"
+  - "A side by side comparison showing which side is wrong"
+recommended_fix_template: |
+  The container hit CreateContainerConfigError because the pod spec refers to a key
+  that the Secret or ConfigMap does not have.
+
+  Pod asks for: <KEY_REQUESTED> in <KIND>/<NAME>
+  Object has:   <KEYS_PRESENT>
+
+  Usual fix (the spec is wrong): patch the deployment to use the right key.
+    kubectl patch deployment <DEPLOY> -n <NS> --type='json' \
+      -p='[{"op":"replace","path":"/spec/template/spec/containers/0/env/<INDEX>/valueFrom/secretKeyRef/key","value":"<CORRECT_KEY>"}]'
+
+  Rarer fix (the object is wrong): add the missing key to it.
+  Pick the side that matches what the deployment is meant to do.

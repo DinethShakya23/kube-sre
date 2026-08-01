@@ -1,0 +1,28 @@
+name: JobBackoffLimitExceeded
+detect:
+  watch_predicates:
+    - kind: Event
+      reason_regex: "^BackoffLimitExceeded$"
+      involved_kind: Job
+  promql:
+    - 'kube_job_failed{condition="true"} == 1'
+  debounce_seconds: 0
+triggers:
+  - event_reason_regex: "BackoffLimitExceeded"
+  - event_message_regex: "backoff limit.*exceeded|job.*failed.*backoff|reached.*backoff limit"
+investigation_steps:
+  - "kubectl get jobs -n <ns> to see failed counts and completions."
+  - "kubectl describe job <job> -n <ns> and check backoffLimit, activeDeadlineSeconds and conditions."
+  - "kubectl get pods -n <ns> -l job-name=<job> to list the attempts."
+  - "kubectl logs -n <ns> -l job-name=<job> --tail=50 to see why the pods failed."
+  - "Check the job spec for the command, env and resource requests."
+expected_evidence:
+  - "Job condition Failed with reason BackoffLimitExceeded"
+  - "Failed attempts against the configured backoffLimit"
+  - "The cause from the pod logs: non-zero exit, OOM, bad command or missing dependency"
+recommended_fix_template: |
+  Job <JOB_NAME> in <NAMESPACE> used up its backoff limit (<BACKOFF_LIMIT> retries).
+  Cause from the pod logs: <ROOT_CAUSE>. Fix: <FIX_DESCRIPTION>.
+  After the fix, recreate the job:
+    kubectl delete job <JOB_NAME> -n <NAMESPACE>
+    kubectl apply -f <JOB_MANIFEST>

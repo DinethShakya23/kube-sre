@@ -1,0 +1,21 @@
+name: PendingInsufficientResources
+detect:
+  watch_predicates:
+    - kind: Event
+      reason_regex: "^FailedScheduling$"
+      message_regex: "Insufficient (cpu|memory)"
+  promql:
+    - 'kube_pod_status_unschedulable == 1'
+  debounce_seconds: 120
+triggers:
+  - event_message_regex: "Insufficient (cpu|memory)"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns> and read the FailedScheduling event for the exact shortfall."
+  - "kubectl get nodes -o wide for node count and roles."
+  - "kubectl describe node <node> and compare Allocatable with Allocated."
+expected_evidence:
+  - "A FailedScheduling event with 'Insufficient cpu' or 'Insufficient memory'"
+  - "Allocated close to Allocatable on every candidate node"
+recommended_fix_template: |
+  No node has room for the pod. Suggested fix: <ACTION>, such as lowering
+  resources.requests, adding nodes, or evicting lower priority workloads.

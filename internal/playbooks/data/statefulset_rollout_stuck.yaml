@@ -1,0 +1,38 @@
+name: StatefulSetRolloutStuck
+# Triage only. A pending pod or a readiness failure cannot tell a normal rollout
+# wait from a stall, and a watch predicate cannot follow owners and revisions
+# across observations. The creation failures below only help pick a guide.
+detect: null
+triggers:
+  - event_message_regex: 'create Pod [a-z0-9.-]+ in StatefulSet [a-z0-9.-]+ failed error:'
+  - event_message_regex: 'create Claim [a-z0-9.-]+ for Pod [a-z0-9.-]+ in StatefulSet [a-z0-9.-]+ failed error:'
+investigation_steps:
+  - "Confirm the intended update with the owner. Note the namespace, StatefulSet, target revision and when progress stopped. A creation failure can also happen on first deploy or scaling."
+  - "kubectl get statefulset <sts> -n <ns> -o yaml and read generation, observedGeneration, replicas, currentRevision, updateRevision, updatedReplicas, readyReplicas, updateStrategy (including the partition), podManagementPolicy, minReadySeconds and ordinals.start. OnDelete or a deliberate partition is not a stall."
+  - "kubectl get pods -n <ns> -o wide to find the candidate ordinals, then check ownerReferences, controller-revision-hash, claim names, deletionTimestamp and Ready for each. Do not infer ownership from a name prefix or assume ordinals start at zero."
+  - "Compare two timestamped looks. Find which ordinal has not reached the target revision or become Ready within the normal startup time. Ordered creation waits on lower ordinals and rolling updates normally go from higher ones, so check the strategy first."
+  - "kubectl describe pod <pod> -n <ns> for scheduling, mounts, container state, readiness probes and readinessGates. Running is not Ready. Tell a failing probe from an unmet readiness gate."
+  - "kubectl describe pvc <claim> -n <ns> using the claim the pod really references. Pending can be normal until a consumer exists, so tie it to scheduling before blaming storage. Use PvcPending for the storage cause."
+  - "kubectl get events -n <ns> --sort-by=.lastTimestamp and line up the StatefulSet's create error with its pods and claims. Several playbooks may apply. If access is denied or observations are missing, say so instead of claiming a stall."
+expected_evidence:
+  - "A known intended update, a verified StatefulSet owner, and repeated looks showing no progress beyond the agreed startup time"
+  - "The blocking ordinal and specific claim, scheduling, container or readiness gate evidence. A creation error alone does not prove a stall."
+  - "OnDelete, an intended partition, minReadySeconds and normal ordered waiting have been ruled out"
+recommended_fix_template: |
+  StatefulSet <STS> in <NS> is blocked at ordinal <ORDINAL>, supported by
+  <TIMESTAMPED_PROGRESS_COMPARISON> and <PVC_OR_READINESS_OR_CREATION_EVIDENCE>.
+  If that evidence is incomplete, collect more before proposing a change.
+
+  Fix what was measured: repair the provisioning or scheduling limit, correct the rejected
+  pod spec, or restore the dependency, probe or gate that blocks readiness. Respect the
+  quorum and storage needs of the workload. Do not delete claims, disable readiness gates,
+  force delete pods, or change ordering or partition just to make it look finished.
+
+  For a bad template, propose a revert with the owner. A rollback can still wait on a broken
+  pod. If a pod must be recreated, review that exact pod and its data and quorum effects
+  with an authorised operator first, and only delete it gracefully. All manifest, scale,
+  partition, rollback or pod changes keep the dry run and human approval step.
+
+  After approval, check that the intended ordinals reach their revision and stay Ready for
+  minReadySeconds, that claims keep their data, and that the app is healthy. A partitioned
+  update may leave older ordinals on the old revision on purpose.

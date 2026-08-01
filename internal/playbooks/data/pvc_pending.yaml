@@ -1,0 +1,31 @@
+name: PvcPending
+detect:
+  watch_predicates:
+    # A claim failure arrives as an Event whose involved object is the claim.
+    # `kind` picks the channel (Pod, Event or Node) and `involved_kind` narrows it.
+    # `kind: PersistentVolumeClaim` would load but could never match.
+    - kind: Event
+      reason_regex: "^(FailedBinding|ProvisioningFailed)$"
+      involved_kind: PersistentVolumeClaim
+  promql:
+    - >-
+      kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
+  debounce_seconds: 300
+triggers:
+  - event_reason_regex: "FailedBinding|ProvisioningFailed"
+  - event_message_regex: "no persistent volumes available|storageclass.*not found|waiting for.*to be created"
+investigation_steps:
+  - "kubectl get pvc -A to find claims that are Pending and for how long."
+  - "kubectl describe pvc <pvc> -n <ns> for events, storageClassName, accessModes and size."
+  - "kubectl get storageclass to check the requested class exists and has a provisioner."
+  - "kubectl get pv to check whether any volume fits the claim and is Available."
+  - "kubectl describe storageclass <sc> for the provisioner and parameters."
+expected_evidence:
+  - "The claim has been Pending for more than 5 minutes, so it is not transient"
+  - "Events with 'no persistent volumes available' or a storageclass that is not found"
+  - "No default StorageClass, when the claim names none"
+recommended_fix_template: |
+  PVC <PVC> in <NS> is Pending. It asks for storageClassName <SC>, accessModes <MODES>
+  and size <SIZE>, and no volume fits. Create the missing StorageClass, set a correct
+  storageClassName, or create a static PV that matches. Pick the safest option for the
+  workload and do not apply it automatically.

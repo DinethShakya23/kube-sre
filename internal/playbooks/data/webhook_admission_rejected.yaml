@@ -1,0 +1,29 @@
+name: WebhookAdmissionRejected
+detect:
+  watch_predicates:
+    - kind: Event
+      reason_regex: "^FailedCreate$"
+      message_regex: "admission webhook .* denied|webhook .* denied the request|failed calling webhook"
+  promql:
+    # An apiserver metric, not kube-state-metrics.
+    - 'increase(apiserver_admission_webhook_rejection_count[5m]) > 0'
+  debounce_seconds: 30
+triggers:
+  - event_reason_regex: "FailedCreate"
+  - event_message_regex: "admission webhook.*denied|webhook.*denied the request|failed calling webhook"
+investigation_steps:
+  - "kubectl get events -n <ns> --field-selector reason=FailedCreate for the full rejection message."
+  - "kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations to list the webhooks."
+  - "kubectl describe validatingwebhookconfiguration <name> for rules, namespaceSelector and failurePolicy."
+  - "kubectl get pods,svc -n <webhook-ns> to check the webhook service is healthy."
+  - "kubectl logs -n <webhook-ns> <webhook-pod> --tail=50 for the rejection reason from the webhook."
+expected_evidence:
+  - "The webhook configuration that denied the request"
+  - "The reason in the webhook's response"
+  - "Whether the webhook service is running and reachable"
+  - "The failurePolicy (Fail or Ignore)"
+recommended_fix_template: |
+  Admission webhook <WEBHOOK_NAME> denied the request: <REJECTION_REASON>. Options:
+  1. Change the resource to meet the webhook policy: <COMPLIANCE_FIX>.
+  2. If the webhook service is down, restore <WEBHOOK_NAMESPACE>/<WEBHOOK_SERVICE>.
+  3. If the webhook is set up wrong, patch its rules or namespaceSelector.

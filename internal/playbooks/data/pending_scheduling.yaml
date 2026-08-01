@@ -1,0 +1,21 @@
+name: PendingSchedulingConstraints
+detect:
+  watch_predicates:
+    - kind: Event
+      reason_regex: "^FailedScheduling$"
+      message_regex: "didn't tolerate|untolerated taint|node affinity|didn't match Pod's node affinity/selector|nodeSelector"
+  # No promql on purpose: the unschedulable metric cannot say why.
+  promql: []
+  debounce_seconds: 120
+triggers:
+  - event_message_regex: "didn't tolerate|node\\(s\\) had untolerated taint|node affinity|nodeSelector"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns> and read the FailedScheduling event for taint or affinity reasons."
+  - "kubectl get nodes --show-labels to see whether any node has the labels the pod needs."
+  - "kubectl describe node <node> and check its taints against the pod's tolerations."
+expected_evidence:
+  - "A FailedScheduling event that mentions a taint, nodeSelector or affinity"
+  - "The pod's nodeSelector or affinity matches no node's labels"
+recommended_fix_template: |
+  The pod's scheduling rules rule out every node. Suggested fix: <ACTION>, such as adding
+  the toleration, fixing the nodeSelector, or labelling a node so it qualifies.

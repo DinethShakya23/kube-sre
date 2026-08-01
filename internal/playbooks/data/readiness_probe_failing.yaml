@@ -1,0 +1,28 @@
+name: ReadinessProbeFailing
+detect:
+  watch_predicates:
+    # A failed readiness probe takes the pod out of Service endpoints. A failed
+    # liveness probe restarts it. They are separate playbooks, so this one must
+    # not match "Liveness probe failed".
+    - kind: Event
+      reason_regex: "^Unhealthy$"
+      message_regex: "Readiness probe failed"
+      involved_kind: Pod
+  promql:
+    - 'min_over_time(kube_pod_status_ready{condition="false"}[5m]) == 1'
+  debounce_seconds: 180
+triggers:
+  - event_message_regex: "Readiness probe failed"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns> and read the exact probe failure in Events."
+  - "Check spec.containers[].readinessProbe for path, port and timing."
+  - "kubectl logs <pod> -n <ns> --tail=50 to confirm the app is really starting."
+expected_evidence:
+  - "A 'Readiness probe failed' event with an HTTP status or connection refused"
+  - "A probe with a short initialDelaySeconds or a wrong path"
+  - "App logs showing slow startup or a different port"
+recommended_fix_template: |
+  The readiness probe on <POD> in <NS> fails, so the pod is held out of its Service
+  endpoints. It is not being restarted. Suggested fix: <ACTION>, such as correcting the
+  path or port, raising initialDelaySeconds or periodSeconds, or fixing the app.
+  If it is also being restarted, the liveness probe fails too. See LivenessProbeFailing.

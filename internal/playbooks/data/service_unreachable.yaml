@@ -1,0 +1,16 @@
+name: ServiceUnreachable
+detect: null
+triggers:
+  - event_message_regex: "no endpoints available|connection refused|service.*not found"
+investigation_steps:
+  - "kubectl get svc <svc> -n <ns> -o wide to confirm it exists and see its selector."
+  - "kubectl get endpoints <svc> -n <ns>. An empty list means the selector matches nothing."
+  - "kubectl get pods -n <ns> --show-labels to compare the labels with the selector."
+  - "kubectl get networkpolicy -n <ns> for policies that block the traffic."
+expected_evidence:
+  - "An empty Endpoints object for the service"
+  - "service.spec.selector does not match the pod labels"
+  - "A NetworkPolicy with tight ingress or egress rules"
+recommended_fix_template: |
+  The service has no backend that can be reached. Suggested fix: <ACTION>, such as
+  fixing the selector to match the pod labels, or updating the NetworkPolicy to allow it.

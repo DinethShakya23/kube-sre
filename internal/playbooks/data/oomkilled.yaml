@@ -1,0 +1,38 @@
+name: OOMKilled
+detect:
+  watch_predicates:
+    - kind: Pod
+      status_regex: "^OOMKilled$"
+    - kind: Event
+      reason_regex: "^OOMKilling$"
+  promql:
+    - >-
+      (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1)
+      and on(namespace, pod, container)
+      (increase(kube_pod_container_status_restarts_total[15m]) > 0)
+  # Forecast, so the finding can come before the kill.
+  trend_predicates:
+    - metric: >-
+        sum by (namespace, pod) (container_memory_working_set_bytes{container!=""})
+        / sum by (namespace, pod) (kube_pod_container_resource_limits{resource="memory"})
+      threshold: 1.0
+      window_minutes: 30
+      projection_horizon_minutes: 60
+      fire_if_eta_within_minutes: 30
+      direction: rising
+      min_r2: 0.6
+  debounce_seconds: 60
+triggers:
+  - pod_status_regex: "OOMKilled"
+  - event_reason_regex: "OOMKilling"
+investigation_steps:
+  - "kubectl describe pod <pod> -n <ns>. Confirm Last State reason OOMKilled and read resources.limits.memory."
+  - "Query container_memory_working_set_bytes for the pod over the last 30 minutes to find the spike."
+  - "kubectl logs <pod> -n <ns> --previous --tail=50 for memory pressure messages just before the kill."
+expected_evidence:
+  - "Last State reason OOMKilled"
+  - "Memory close to or over limits.memory just before the kill"
+  - "Heavy allocation in the app logs right before it died"
+recommended_fix_template: |
+  The container was killed for going over its memory limit. Raise resources.limits.memory,
+  tune the runtime's GC for memory, or fix the leak. Suggested fix: <ACTION>.

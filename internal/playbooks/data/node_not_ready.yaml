@@ -1,0 +1,34 @@
+name: NodeNotReady
+detect:
+  watch_predicates:
+    # Also matches "NotReady,SchedulingDisabled".
+    - kind: Node
+      status_regex: "NotReady|Unknown"
+    - kind: Event
+      reason_regex: "^(NodeNotReady|NodeHasDiskPressure|NodeHasMemoryPressure|KubeletNotReady)$"
+  promql:
+    - 'kube_node_status_condition{condition="Ready",status="true"} == 0'
+    - 'kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure",condition!="Ready",status="true"} == 1'
+  debounce_seconds: 300
+triggers:
+  - event_reason_regex: "NodeNotReady|NodeHasDiskPressure|NodeHasMemoryPressure|KubeletNotReady"
+  - event_message_regex: "node.*not ready|kubelet.*not posting|node.*unreachable|node.*condition.*unknown"
+investigation_steps:
+  - "kubectl get nodes -o wide for status, roles and age."
+  - "kubectl describe node <node> and check Ready, MemoryPressure, DiskPressure, NetworkUnavailable and Events."
+  - "kubectl get events -A --field-selector involvedObject.name=<node> for node events."
+  - "kubectl get pods -A --field-selector spec.nodeName=<node> to see the affected workloads."
+  - "kubectl top nodes to check for saturation."
+expected_evidence:
+  - "The node condition: NotReady, MemoryPressure, DiskPressure, NetworkUnavailable or Unknown"
+  - "How long the node has been in that state"
+  - "The last kubelet heartbeat and any kubelet errors"
+recommended_fix_template: |
+  Node <NODE_NAME> is NotReady (condition <CONDITION>, for <DURATION>).
+  First stop new scheduling: kubectl cordon <NODE_NAME>
+  Then:
+  - If it looks temporary, drain it and let the provider replace it:
+    kubectl drain <NODE_NAME> --ignore-daemonsets --delete-emptydir-data
+  - If the kubelet stopped, check the service and its certificate expiry on the node.
+  - If it is a network problem, check security groups and the CNI plugin.
+  After recovery: kubectl uncordon <NODE_NAME>
