@@ -73,3 +73,15 @@ func TestMigrateRollsBackOnError(t *testing.T) {
 		t.Errorf("failed migration must not be recorded, version=%d", v)
 	}
 }
+
+func TestDDLTokens(t *testing.T) {
+	in := "id {{PK}}, at {{TS}}, body {{JSON}}"
+	lite := (&DB{Dialect: SQLite}).DDL(in)
+	if lite != "id INTEGER PRIMARY KEY AUTOINCREMENT, at TIMESTAMP, body TEXT" {
+		t.Errorf("sqlite: %s", lite)
+	}
+	pg := (&DB{Dialect: Postgres}).DDL(in)
+	if pg != "id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ, body JSONB" {
+		t.Errorf("postgres: %s", pg)
+	}
+}

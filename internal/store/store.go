@@ -83,6 +83,16 @@ func (d *DB) Q(query string) string {
 	return b.String()
 }
 
+// DDL fills in dialect tokens so one migration can run on both databases:
+// {{PK}} auto-numbered key, {{TS}} timestamp, {{JSON}} json column.
+func (d *DB) DDL(sql string) string {
+	pk, ts, js := "INTEGER PRIMARY KEY AUTOINCREMENT", "TIMESTAMP", "TEXT"
+	if d.Dialect == Postgres {
+		pk, ts, js = "BIGSERIAL PRIMARY KEY", "TIMESTAMPTZ", "JSONB"
+	}
+	return strings.NewReplacer("{{PK}}", pk, "{{TS}}", ts, "{{JSON}}", js).Replace(sql)
+}
+
 type Migration struct {
 	Version int
 	Name    string
@@ -122,7 +132,7 @@ func (d *DB) Migrate(ctx context.Context, migrations []Migration) error {
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, m.SQL); err != nil {
+		if _, err = tx.ExecContext(ctx, d.DDL(m.SQL)); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("migration %d %s: %w", m.Version, m.Name, err)
 		}
