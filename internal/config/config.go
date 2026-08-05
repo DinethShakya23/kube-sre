@@ -63,6 +63,8 @@ type Config struct {
 	Playbooks             bool
 	GraphRecursionLimit   int
 	Sensorium             bool
+	FlightRecorder        bool
+	RedactSecrets         bool
 	SensoriumQueueSize    int
 	SensoriumNamespaces   []string
 	CoordinatorRecursions int
@@ -145,6 +147,8 @@ func Load(getenv func(string) string) *Config {
 		Playbooks:             boolean("PLAYBOOKS_ENABLED", true),
 		GraphRecursionLimit:   num("AGENT_GRAPH_RECURSION_LIMIT", 120),
 		Sensorium:             boolean("SENSORIUM_ENABLED", true),
+		FlightRecorder:        boolean("FLIGHT_RECORDER_ENABLED", true),
+		RedactSecrets:         boolean("REFLEXION_REDACT_SECRETS", true),
 		SensoriumQueueSize:    num("SENSORIUM_QUEUE_MAXSIZE", 10000),
 		SensoriumNamespaces:   list(str("SENSORIUM_WATCH_NAMESPACES", "")),
 		CoordinatorRecursions: num("AGENT_COORDINATOR_RECURSION_LIMIT", 150),
