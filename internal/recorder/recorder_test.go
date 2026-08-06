@@ -2,25 +2,17 @@ package recorder
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/store"
+	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
 )
 
 func testDB(t *testing.T) *store.DB {
 	t.Helper()
-	db, err := store.OpenSQLite(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := db.Migrate(context.Background(), Migrations); err != nil {
-		t.Fatal(err)
-	}
-	return db
+	return storetest.New(t, Migrations)
 }
 
 func started(t *testing.T, db *store.DB) *Recorder {

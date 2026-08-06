@@ -2,24 +2,20 @@ package audit
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/store"
+	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
 )
 
 func testLog(t *testing.T, migrate bool) (*Log, *store.DB) {
 	t.Helper()
-	db, err := store.OpenSQLite(filepath.Join(t.TempDir(), "a.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
+	var db *store.DB
 	if migrate {
-		if err := db.Migrate(context.Background(), Migrations); err != nil {
-			t.Fatal(err)
-		}
+		db = storetest.New(t, Migrations)
+	} else {
+		db = storetest.New(t)
 	}
 	l := New(db)
 	l.Start(context.Background())
@@ -33,7 +29,7 @@ func TestWriteInsertsARow(t *testing.T) {
 	var path, role string
 	var status int
 	var ms float64
-	if err := db.QueryRow(`SELECT path, user_role, status_code, duration_ms FROM request_log WHERE request_id = 'r1'`).
+	if err := db.QueryRow(db.Q(`SELECT path, user_role, status_code, duration_ms FROM request_log WHERE request_id = ?`), "r1").
 		Scan(&path, &role, &status, &ms); err != nil {
 		t.Fatal(err)
 	}
