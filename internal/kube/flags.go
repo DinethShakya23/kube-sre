@@ -289,11 +289,11 @@ func numberForms(word string) map[string]bool {
 	return out
 }
 
-// resourceSpellings is every spelling of a resource that must be tested against
+// ResourceSpellings is every spelling of a resource that must be tested against
 // the blocklist: the raw token, the name before `.version.group`
 // (`secrets.v1.`), the canonical name for a short alias, and singular and plural
 // of each, since `get configmap` and `get configmaps` are one command.
-func resourceSpellings(resource string) map[string]bool {
+func ResourceSpellings(resource string) map[string]bool {
 	out := map[string]bool{}
 	if resource == "" {
 		return out

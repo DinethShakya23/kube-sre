@@ -170,8 +170,8 @@ func TestResourceTypeAndTargets(t *testing.T) {
 func TestResourceSpellings(t *testing.T) {
 	has := func(res, want string) {
 		t.Helper()
-		if !resourceSpellings(res)[want] {
-			t.Errorf("%q should include %q: %v", res, want, resourceSpellings(res))
+		if !ResourceSpellings(res)[want] {
+			t.Errorf("%q should include %q: %v", res, want, ResourceSpellings(res))
 		}
 	}
 	has("sa", "serviceaccounts")
@@ -184,7 +184,7 @@ func TestResourceSpellings(t *testing.T) {
 	has("ingress", "ingresses")
 	has("networkpolicies", "networkpolicy")
 	has("networkpolicy", "networkpolicies")
-	if len(resourceSpellings("")) != 0 {
+	if len(ResourceSpellings("")) != 0 {
 		t.Error("empty resource")
 	}
 }

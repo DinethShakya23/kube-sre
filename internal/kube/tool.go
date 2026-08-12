@@ -72,7 +72,7 @@ func NewTool(cfg Config) *Tool {
 	// Both sides of the comparison get the same rules: the typed token and the
 	// configured entry, so it no longer matters which spelling an operator wrote.
 	for entry := range cfg.BlockedResources {
-		for s := range resourceSpellings(entry) {
+		for s := range ResourceSpellings(entry) {
 			t.blocked[s] = true
 		}
 	}
@@ -322,12 +322,12 @@ func (t *Tool) blockedResourceHit(verb string, args []string, stdin string) stri
 	// `get pods,secrets` names two types in one token, and each is checked.
 	resource := extractResourceType(verb, args)
 	for _, one := range strings.Split(resource, ",") {
-		if intersects(resourceSpellings(one), t.blocked) {
+		if intersects(ResourceSpellings(one), t.blocked) {
 			return one
 		}
 	}
 	for _, kind := range sortedKeys(manifestKinds(stdin)) {
-		if intersects(resourceSpellings(kind), t.blocked) {
+		if intersects(ResourceSpellings(kind), t.blocked) {
 			return kind
 		}
 	}
