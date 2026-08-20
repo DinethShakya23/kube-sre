@@ -323,3 +323,6 @@ func intersects(a, b map[string]bool) bool {
 	}
 	return false
 }
+
+// IsAllNamespaces reports whether the command targets every namespace at once.
+func IsAllNamespaces(args []string) bool { return isAllNamespaces(args) }

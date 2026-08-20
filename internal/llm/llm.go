@@ -20,22 +20,22 @@ const (
 
 // ToolCall is one tool invocation the model asked for.
 type ToolCall struct {
-	ID   string
-	Name string
+	ID   string `json:"id"`
+	Name string `json:"name"`
 	// Args is the parsed argument object; nil when the model sent something that
 	// is not a JSON object, in which case RawArgs holds what it sent.
-	Args    map[string]any
-	RawArgs string
+	Args    map[string]any `json:"args,omitempty"`
+	RawArgs string         `json:"raw_args,omitempty"`
 }
 
 // Message is one turn of a conversation.
 type Message struct {
-	Role       Role
-	Content    string
-	ToolCalls  []ToolCall // assistant messages
-	ToolCallID string     // tool messages
-	Name       string     // tool messages: the tool that produced it
-	IsError    bool       // tool messages: the call failed
+	Role       Role       `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // assistant messages
+	ToolCallID string     `json:"tool_call_id,omitempty"` // tool messages
+	Name       string     `json:"name,omitempty"`         // tool messages: the tool that produced it
+	IsError    bool       `json:"is_error,omitempty"`     // tool messages: the call failed
 }
 
 // ToolSpec describes a tool to the model. Parameters is a JSON schema object.
