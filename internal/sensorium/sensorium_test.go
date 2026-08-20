@@ -170,12 +170,30 @@ func TestWatcherRecordsReasonAndReconnects(t *testing.T) {
 	w := NewWatcher("c1", "", nil, 10)
 	w.BackoffInitial = 20 * time.Millisecond
 	w.Bin = fakeKubectl(t, `echo 'Error from server (Forbidden): pods is forbidden' >&2; exit 1`)
-	collect(t, w, 1, 1500*time.Millisecond)
-	for _, h := range w.Health() {
-		if h.Connected || h.Failures < 2 || h.LastError == "" {
-			t.Errorf("want repeated failures with the reason: %+v", h)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); w.Run(ctx, func(Observation) {}) }()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		hs := w.Health()
+		ok := len(hs) == 2
+		for _, h := range hs {
+			if h.Failures < 2 || h.LastError == "" {
+				ok = false
+			}
 		}
+		if ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			<-done
+			t.Fatalf("want repeated failures with the reason: %+v", w.Health())
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	cancel()
+	<-done
 }
 
 func TestEnqueueShedsOldest(t *testing.T) {
