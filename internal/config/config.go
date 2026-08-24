@@ -88,6 +88,19 @@ type Config struct {
 	// Problems are settings that could not be read as written. Each one fell
 	// back to its default; Validate turns the hard ones into a startup error.
 	Problems []string
+
+	RequireAuth       bool
+	AuthBackend       string // static | hmac
+	DemoKeySecret     string
+	DemoKeyDefaultTTL int // hours
+	DemoKeyMaxTTL     int // hours
+	MetricsEnabled    bool
+
+	RateLimit           bool
+	RateLimitPerMin     int
+	RateLimitBurst      int
+	RateLimitMaxTracked int
+	RateLimitProxyHops  int
 }
 
 var alwaysBlocked = []string{"secret", "secrets", "serviceaccount", "serviceaccounts"}
@@ -209,6 +222,19 @@ func Load(getenv func(string) string) *Config {
 		SensoriumQueueSize:    anyInt("SENSORIUM_QUEUE_MAXSIZE", 10000),
 		SensoriumNamespaces:   list(str("SENSORIUM_WATCH_NAMESPACES", "")),
 		CoordinatorRecursions: num("AGENT_COORDINATOR_RECURSION_LIMIT", 150),
+
+		RequireAuth:       boolean("REQUIRE_AUTH", false),
+		AuthBackend:       strings.ToLower(str("AUTH_BACKEND", "static")),
+		DemoKeySecret:     str("DEMO_KEY_HMAC_SECRET", ""),
+		DemoKeyDefaultTTL: num("DEMO_KEY_DEFAULT_TTL_HOURS", 24*7),
+		DemoKeyMaxTTL:     num("DEMO_KEY_MAX_TTL_HOURS", 24*30),
+		MetricsEnabled:    boolean("METRICS_ENABLED", true),
+
+		RateLimit:           boolean("RATE_LIMIT_ENABLED", true),
+		RateLimitPerMin:     anyInt("RATE_LIMIT_PER_MIN", 120),
+		RateLimitBurst:      anyInt("RATE_LIMIT_BURST", 30),
+		RateLimitMaxTracked: anyInt("RATE_LIMIT_MAX_TRACKED", 10000),
+		RateLimitProxyHops:  anyInt("RATE_LIMIT_TRUSTED_PROXY_HOPS", 0),
 	}
 
 	nsDefault := "kube-sre,monitoring,kube-system,kube-public,kube-node-lease,ingress-nginx,cert-manager"
@@ -257,6 +283,11 @@ func (c *Config) Validate() error {
 	case "azure", "openai", "anthropic", "qwen":
 	default:
 		errs = append(errs, fmt.Sprintf("LLM_PROVIDER must be one of azure, openai, anthropic, qwen, got %q", c.LLMProvider))
+	}
+	switch c.AuthBackend {
+	case "static", "hmac":
+	default:
+		errs = append(errs, fmt.Sprintf("AUTH_BACKEND must be static or hmac, got %q", c.AuthBackend))
 	}
 	switch c.SnapshotMode {
 	case "off", "lenient", "strict":
@@ -370,9 +401,10 @@ func (c *Config) DSN() string {
 	return u.String()
 }
 
-// OpenAccess reports whether no auth keys are configured at all.
+// OpenAccess reports whether no auth is configured at all, so every caller is
+// treated as admin.
 func (c *Config) OpenAccess() bool {
-	return len(c.SuperadminKeys)+len(c.AdminKeys)+len(c.OperatorKeys)+len(c.ReadonlyKeys) == 0
+	return len(c.SuperadminKeys)+len(c.AdminKeys)+len(c.OperatorKeys)+len(c.ReadonlyKeys) == 0 && c.DemoKeySecret == ""
 }
 
 // Warnings lists guard settings that can never match anything.

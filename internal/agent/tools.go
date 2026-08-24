@@ -7,11 +7,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/helm"
 	"github.com/DinethShakya23/kube-sre/internal/kube"
 	"github.com/DinethShakya23/kube-sre/internal/llm"
 	"github.com/DinethShakya23/kube-sre/internal/loki"
+	"github.com/DinethShakya23/kube-sre/internal/metrics"
 	"github.com/DinethShakya23/kube-sre/internal/prom"
 	"github.com/DinethShakya23/kube-sre/internal/redact"
 )
@@ -185,6 +187,7 @@ func (t *Toolset) prepare(call llm.ToolCall, c kube.Call) callOutcome {
 	switch call.Name {
 	case ToolKubectl, ToolHelm, ToolPrometheus, ToolLoki:
 	default:
+		metrics.ToolCalls.Inc("<unknown>", "unknown_tool")
 		return callOutcome{call: call, isError: true,
 			content: fmt.Sprintf("Error: %s is not a valid tool, try one of [%s].", call.Name, strings.Join(t.Names(), ", "))}
 	}
@@ -241,6 +244,18 @@ func (t *Toolset) prepare(call llm.ToolCall, c kube.Call) callOutcome {
 // execute runs a call that has passed prepare and needs no approval, or one that
 // a human has approved.
 func (t *Toolset) execute(ctx context.Context, o callOutcome, c kube.Call) callOutcome {
+	started := time.Now()
+	out := t.run(ctx, o, c)
+	outcome := "ok"
+	if out.isError {
+		outcome = "error"
+	}
+	metrics.ToolCalls.Inc(o.call.Name, outcome)
+	metrics.ToolDuration.Observe(time.Since(started).Seconds(), o.call.Name)
+	return out
+}
+
+func (t *Toolset) run(ctx context.Context, o callOutcome, c kube.Call) callOutcome {
 	call := o.call
 	switch call.Name {
 	case ToolKubectl:
@@ -303,6 +318,8 @@ func (t *Toolset) runBatch(ctx context.Context, calls []llm.ToolCall, c kube.Cal
 		case o.approval != nil && held == nil:
 			cp := o.call
 			held, approval = &cp, o.approval
+			// A gate is the product working, so it is counted apart from errors.
+			metrics.HitlInterrupts.Inc(o.call.Name)
 			continue
 		case o.approval != nil:
 			results[i] = callOutcome{call: o.call, content: "Skipped - pending approval; will be re-proposed in a separate response."}

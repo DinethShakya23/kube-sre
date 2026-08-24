@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+
+	"github.com/DinethShakya23/kube-sre/internal/metrics"
 )
 
 type Role string
@@ -90,6 +92,15 @@ type Meter struct {
 func (m *Meter) Add(u Usage) {
 	if m == nil {
 		return
+	}
+	// Recorded outside the lock: a metrics backend is not something to hold a
+	// request scoped lock across, and this is the one place every model call converges.
+	metrics.LLMCalls.Inc()
+	if u.PromptTokens > 0 {
+		metrics.LLMTokens.Add(float64(u.PromptTokens), "input")
+	}
+	if u.CompletionTokens > 0 {
+		metrics.LLMTokens.Add(float64(u.CompletionTokens), "output")
 	}
 	m.mu.Lock()
 	if u.PromptTokens > 0 {
