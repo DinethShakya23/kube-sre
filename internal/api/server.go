@@ -16,6 +16,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/events"
 	"github.com/DinethShakya23/kube-sre/internal/metrics"
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
+	"github.com/DinethShakya23/kube-sre/internal/perception"
 )
 
 // StatusFunc reports the state of one subsystem for /healthz.
@@ -27,8 +28,10 @@ type Server struct {
 	Agent   *agent.Agent
 	Emitter *events.Emitter
 	Audit   *audit.Log
-	Auth    *Authenticator
-	Limiter *Limiter
+	// Perception is the sensorium and detector service, when one runs.
+	Perception *perception.Service
+	Auth       *Authenticator
+	Limiter    *Limiter
 	// Version is the software version reported on /healthz.
 	Version string
 	// Health lists subsystems reported on /healthz, keyed by their field name
@@ -101,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", s.authed(s.chat))
 	mux.HandleFunc("GET /v1/events/replay/{session}", s.authed(s.replay))
 	mux.HandleFunc("GET /v1/namespaces", s.authed(s.namespaces))
+	mux.HandleFunc("GET /v1/findings", s.authed(s.findings))
 	mux.HandleFunc("GET /v1/auth/whoami", s.authed(s.whoami))
 	mux.HandleFunc("POST /v1/auth/demo-keys", s.authed(s.mintKey))
 	for pattern, h := range s.routes {

@@ -23,6 +23,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/llm"
 	"github.com/DinethShakya23/kube-sre/internal/loki"
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
+	"github.com/DinethShakya23/kube-sre/internal/perception"
 	"github.com/DinethShakya23/kube-sre/internal/playbooks"
 	"github.com/DinethShakya23/kube-sre/internal/prom"
 	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
@@ -660,5 +661,53 @@ func TestMetricsEndpointCountsRequests(t *testing.T) {
 	}
 	if strings.Contains(b, `handler="/metrics"`) || strings.Contains(b, `handler="/healthz"`) {
 		t.Error("probes and the scrape itself are not counted")
+	}
+}
+
+func TestFindingsEndpoint(t *testing.T) {
+	r := newRig(t, nil)
+	get := func(q string) (int, map[string]any) {
+		resp, b := r.do(t, "GET", "/v1/findings"+q, "", nil)
+		var m map[string]any
+		json.Unmarshal([]byte(b), &m)
+		return resp.StatusCode, m
+	}
+	code, m := get("")
+	if code != 200 || m["sensorium"] != "disabled" || m["findings"] == nil || m["streams"] == nil {
+		t.Fatalf("%d %v", code, m)
+	}
+	if code, _ := get("?limit=0"); code != 422 {
+		t.Error("limit below 1")
+	}
+	if code, _ := get("?limit=501"); code != 422 {
+		t.Error("limit above 500")
+	}
+	if code, _ := get("?since=-1"); code != 422 {
+		t.Error("negative since")
+	}
+	if code, _ := get("?limit=5&since=0"); code != 200 {
+		t.Error("valid bounds")
+	}
+
+	svc := perception.NewService(r.srv.Cfg, playbooks.Load())
+	svc.Bin = r.bin
+	r.srv.Perception = svc
+	svc.RecordStartFailure(context.DeadlineExceeded)
+	_, m = get("")
+	if m["sensorium"] != "disabled" || !strings.Contains(m["sensorium_reason"].(string), "FAILED to start") || m["queue"].(map[string]any)["maxsize"] != float64(10000) {
+		t.Errorf("%v", m)
+	}
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Stop("", "")
+	_, m = get("")
+	for _, k := range []string{"sensorium", "detectors", "predictive", "predictive_detectors", "predictive_error", "streams", "queue", "findings", "sensorium_reason"} {
+		if _, ok := m[k]; !ok {
+			t.Errorf("missing %s: %v", k, m)
+		}
+	}
+	if m["detectors"] != float64(20) || m["predictive"] != "off" {
+		t.Errorf("%v", m)
 	}
 }

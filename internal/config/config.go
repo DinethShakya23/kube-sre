@@ -89,12 +89,14 @@ type Config struct {
 	// back to its default; Validate turns the hard ones into a startup error.
 	Problems []string
 
-	RequireAuth       bool
-	AuthBackend       string // static | hmac
-	DemoKeySecret     string
-	DemoKeyDefaultTTL int // hours
-	DemoKeyMaxTTL     int // hours
-	MetricsEnabled    bool
+	PredictiveDetection    bool
+	PredictiveTrendSeconds int
+	RequireAuth            bool
+	AuthBackend            string // static | hmac
+	DemoKeySecret          string
+	DemoKeyDefaultTTL      int // hours
+	DemoKeyMaxTTL          int // hours
+	MetricsEnabled         bool
 
 	RateLimit           bool
 	RateLimitPerMin     int
@@ -223,12 +225,14 @@ func Load(getenv func(string) string) *Config {
 		SensoriumNamespaces:   list(str("SENSORIUM_WATCH_NAMESPACES", "")),
 		CoordinatorRecursions: num("AGENT_COORDINATOR_RECURSION_LIMIT", 150),
 
-		RequireAuth:       boolean("REQUIRE_AUTH", false),
-		AuthBackend:       strings.ToLower(str("AUTH_BACKEND", "static")),
-		DemoKeySecret:     str("DEMO_KEY_HMAC_SECRET", ""),
-		DemoKeyDefaultTTL: num("DEMO_KEY_DEFAULT_TTL_HOURS", 24*7),
-		DemoKeyMaxTTL:     num("DEMO_KEY_MAX_TTL_HOURS", 24*30),
-		MetricsEnabled:    boolean("METRICS_ENABLED", true),
+		PredictiveDetection:    boolean("PREDICTIVE_DETECTION_ENABLED", false),
+		PredictiveTrendSeconds: anyInt("PREDICTIVE_TREND_INTERVAL_SECONDS", 60),
+		RequireAuth:            boolean("REQUIRE_AUTH", false),
+		AuthBackend:            strings.ToLower(str("AUTH_BACKEND", "static")),
+		DemoKeySecret:          str("DEMO_KEY_HMAC_SECRET", ""),
+		DemoKeyDefaultTTL:      num("DEMO_KEY_DEFAULT_TTL_HOURS", 24*7),
+		DemoKeyMaxTTL:          num("DEMO_KEY_MAX_TTL_HOURS", 24*30),
+		MetricsEnabled:         boolean("METRICS_ENABLED", true),
 
 		RateLimit:           boolean("RATE_LIMIT_ENABLED", true),
 		RateLimitPerMin:     anyInt("RATE_LIMIT_PER_MIN", 120),

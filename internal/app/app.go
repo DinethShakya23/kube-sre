@@ -19,6 +19,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/llm"
 	"github.com/DinethShakya23/kube-sre/internal/loki"
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
+	"github.com/DinethShakya23/kube-sre/internal/perception"
 	"github.com/DinethShakya23/kube-sre/internal/playbooks"
 	"github.com/DinethShakya23/kube-sre/internal/prom"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
@@ -31,13 +32,14 @@ const Version = "0.1.0"
 
 // App is a running server's parts.
 type App struct {
-	Cfg      *config.Config
-	DB       *store.DB
-	Recorder *recorder.Recorder
-	Audit    *audit.Log
-	Emitter  *events.Emitter
-	Agent    *agent.Agent
-	Server   *api.Server
+	Cfg        *config.Config
+	DB         *store.DB
+	Recorder   *recorder.Recorder
+	Audit      *audit.Log
+	Emitter    *events.Emitter
+	Agent      *agent.Agent
+	Server     *api.Server
+	Perception *perception.Service
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -128,7 +130,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Playbooks:   playbooks.Load(),
 		ClusterID:   resolver.Resolve,
 	})
+	pb := a.Agent.Playbooks
+	a.Perception = perception.NewService(cfg, pb)
+	a.Perception.ClusterID = resolver.Resolve
+	a.Perception.Recorder = a.Recorder
 	a.Server = api.NewServer(cfg, a.Agent, a.Emitter, Version)
+	a.Server.Perception = a.Perception
+	a.Server.Health["sensorium"] = a.Perception.Status
 	a.Server.Audit = a.Audit
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
@@ -137,6 +145,14 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 
 // Serve accepts traffic until ctx ends, then shuts down in order.
 func (a *App) Serve(ctx context.Context, addr string) error {
+	// Perception failing must never cost availability: a start that raises is
+	// recorded, and reported as an outage rather than a setting.
+	if !a.Cfg.Sensorium {
+		a.Perception.RecordDisabled()
+	} else if err := a.Perception.Start(ctx); err != nil {
+		a.Perception.RecordStartFailure(err)
+		slog.Warn("sensorium failed to start, continuing without", "err", err)
+	}
 	// Everything above either succeeded or degraded on purpose, so accept traffic.
 	a.Server.SetReady(true)
 	slog.Info("listening", "addr", addr)
@@ -152,6 +168,7 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 
 // Close stops background work and closes the database.
 func (a *App) Close() {
+	a.Perception.Stop("", "")
 	a.Recorder.Close()
 	if a.DB != nil {
 		a.DB.Close()
