@@ -11,6 +11,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/api"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
+	"github.com/DinethShakya23/kube-sre/internal/autonomy"
 	"github.com/DinethShakya23/kube-sre/internal/cluster"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/events"
@@ -40,6 +41,7 @@ type App struct {
 	Agent      *agent.Agent
 	Server     *api.Server
 	Perception *perception.Service
+	Watchtower *autonomy.Watchtower
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -134,6 +136,11 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Perception = perception.NewService(cfg, pb)
 	a.Perception.ClusterID = resolver.Resolve
 	a.Perception.Recorder = a.Recorder
+	// Findings open their own investigations through the same turn machinery chat uses.
+	a.Watchtower = autonomy.NewWatchtower(cfg)
+	a.Watchtower.Prepare = a.Emitter.Prepare
+	a.Watchtower.Investigate = a.Agent.Run
+	a.Perception.OnFinding = a.Watchtower.OnFinding
 	a.Server = api.NewServer(cfg, a.Agent, a.Emitter, Version)
 	a.Server.Perception = a.Perception
 	a.Server.Health["sensorium"] = a.Perception.Status
@@ -147,6 +154,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 func (a *App) Serve(ctx context.Context, addr string) error {
 	// Perception failing must never cost availability: a start that raises is
 	// recorded, and reported as an outage rather than a setting.
+	a.Watchtower.Start(ctx)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
 	} else if err := a.Perception.Start(ctx); err != nil {
@@ -169,6 +177,7 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 // Close stops background work and closes the database.
 func (a *App) Close() {
 	a.Perception.Stop("", "")
+	a.Watchtower.Wait()
 	a.Recorder.Close()
 	if a.DB != nil {
 		a.DB.Close()
