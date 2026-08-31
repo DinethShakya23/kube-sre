@@ -7,11 +7,13 @@
 //	10-19  flight recorder
 //	20-29  request audit
 //	30-39  conversation state
+//	40-59  memory
 package schema
 
 import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
+	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
 	"github.com/DinethShakya23/kube-sre/internal/store"
 )
@@ -22,6 +24,8 @@ func All() []store.Migration {
 	out = append(out, recorder.Migrations...)
 	out = append(out, audit.Migrations...)
 	out = append(out, agent.CheckpointMigrations...)
+	out = append(out, memory.StoreMigrations...)
+	out = append(out, memory.EpisodeMigrations...)
 	return out
 }
 

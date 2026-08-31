@@ -100,12 +100,20 @@ type Config struct {
 	AutonomyNsLevels    string // "prod=A0,dev=A2"
 	AutonomyA3Allowlist string // "CrashLoopBackOff/dev-*"
 
-	RequireAuth       bool
-	AuthBackend       string // static | hmac
-	DemoKeySecret     string
-	DemoKeyDefaultTTL int // hours
-	DemoKeyMaxTTL     int // hours
-	MetricsEnabled    bool
+	// Memory
+	MemoryHybrid        bool
+	MemoryImportance    bool
+	MemorySimFloor      float64
+	PreferenceMemory    bool
+	PreferenceDecayDays int
+	PreferenceMinConf   float64
+	PreferenceMinOccur  int
+	RequireAuth         bool
+	AuthBackend         string // static | hmac
+	DemoKeySecret       string
+	DemoKeyDefaultTTL   int // hours
+	DemoKeyMaxTTL       int // hours
+	MetricsEnabled      bool
 
 	RateLimit           bool
 	RateLimitPerMin     int
@@ -242,6 +250,15 @@ func Load(getenv func(string) string) *Config {
 		AutonomyLevel:       str("AUTONOMY_LEVEL", "A1"),
 		AutonomyNsLevels:    str("AUTONOMY_NAMESPACE_LEVELS", ""),
 		AutonomyA3Allowlist: str("AUTONOMY_A3_ALLOWLIST", ""),
+
+		MemoryHybrid:     boolean("MEMORY_HYBRID_RETRIEVAL", false),
+		MemoryImportance: boolean("MEMORY_IMPORTANCE", false),
+		MemorySimFloor:   float("MEMORY_RECALL_SIMILARITY_FLOOR", 0.02),
+
+		PreferenceMemory:    boolean("PREFERENCE_MEMORY_ENABLED", true),
+		PreferenceDecayDays: anyInt("PREFERENCE_DECAY_DAYS", 60),
+		PreferenceMinConf:   float("PREFERENCE_MIN_CONFIDENCE", 0.3),
+		PreferenceMinOccur:  anyInt("PREFERENCE_INFER_MIN_OCCURRENCE", 3),
 
 		RequireAuth:       boolean("REQUIRE_AUTH", false),
 		AuthBackend:       strings.ToLower(str("AUTH_BACKEND", "static")),
