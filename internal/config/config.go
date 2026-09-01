@@ -102,6 +102,9 @@ type Config struct {
 
 	// Memory
 	MemoryHybrid        bool
+	MemoryBitemporal    bool
+	MemoryKGPPR         bool
+	MemoryReconcile     bool
 	MemoryImportance    bool
 	MemorySimFloor      float64
 	PreferenceMemory    bool
@@ -250,6 +253,10 @@ func Load(getenv func(string) string) *Config {
 		AutonomyLevel:       str("AUTONOMY_LEVEL", "A1"),
 		AutonomyNsLevels:    str("AUTONOMY_NAMESPACE_LEVELS", ""),
 		AutonomyA3Allowlist: str("AUTONOMY_A3_ALLOWLIST", ""),
+
+		MemoryBitemporal: boolean("MEMORY_BITEMPORAL_ENABLED", false),
+		MemoryKGPPR:      boolean("MEMORY_KG_PPR", false),
+		MemoryReconcile:  boolean("MEMORY_WRITE_RECONCILE", false),
 
 		MemoryHybrid:     boolean("MEMORY_HYBRID_RETRIEVAL", false),
 		MemoryImportance: boolean("MEMORY_IMPORTANCE", false),
