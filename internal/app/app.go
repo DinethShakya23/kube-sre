@@ -19,6 +19,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/kube"
 	"github.com/DinethShakya23/kube-sre/internal/llm"
 	"github.com/DinethShakya23/kube-sre/internal/loki"
+	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
 	"github.com/DinethShakya23/kube-sre/internal/perception"
 	"github.com/DinethShakya23/kube-sre/internal/playbooks"
@@ -42,6 +43,8 @@ type App struct {
 	Server     *api.Server
 	Perception *perception.Service
 	Watchtower *autonomy.Watchtower
+	Memory     *memory.Store
+	graph      *graphFeed
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -124,18 +127,22 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Prom: prom.New(cfg.PrometheusURL, blocked),
 		Loki: loki.New(cfg.LokiURL, blocked),
 	}
+	a.Memory = memory.NewStore(db, cfg)
+	a.graph = newGraphFeed(a.Memory, 1000)
 	resolver := cluster.NewResolver(cfg.ClusterID, cfg.KubeconfigPath)
 	a.Agent = agent.New(agent.Deps{
 		Cfg: cfg, Tools: tools, Coordinator: coord, Subagent: sub, Emitter: a.Emitter,
 		Checkpoints: &agent.DBCheckpoints{DB: db},
 		Snapshot:    &agent.Snapshotter{Bin: "kubectl", Kubeconfig: cfg.KubeconfigPath, Timeout: cfg.KubectlTimeout, Blocked: blocked},
 		Playbooks:   playbooks.Load(),
+		Memory:      newMemoryAdapter(a.Memory),
 		ClusterID:   resolver.Resolve,
 	})
 	pb := a.Agent.Playbooks
 	a.Perception = perception.NewService(cfg, pb)
 	a.Perception.ClusterID = resolver.Resolve
 	a.Perception.Recorder = a.Recorder
+	a.Perception.Observe = a.graph.Offer
 	// Findings open their own investigations through the same turn machinery chat uses.
 	a.Watchtower = autonomy.NewWatchtower(cfg)
 	a.Watchtower.Prepare = a.Emitter.Prepare
@@ -147,6 +154,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Server.Audit = a.Audit
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
+	a.Server.Health["memory"] = a.memoryStatus
 	return a, nil
 }
 
@@ -155,6 +163,7 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 	// Perception failing must never cost availability: a start that raises is
 	// recorded, and reported as an outage rather than a setting.
 	a.Watchtower.Start(ctx)
+	go a.graph.Run(ctx)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
 	} else if err := a.Perception.Start(ctx); err != nil {
@@ -181,5 +190,13 @@ func (a *App) Close() {
 	a.Recorder.Close()
 	if a.DB != nil {
 		a.DB.Close()
+	}
+}
+
+func (a *App) memoryStatus() map[string]any {
+	return map[string]any{
+		"counters":            a.Memory.Live.Counters(),
+		"graph_dropped":       a.graph.Dropped(),
+		"graph_queue_backlog": len(a.graph.queue),
 	}
 }
