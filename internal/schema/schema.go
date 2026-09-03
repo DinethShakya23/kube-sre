@@ -27,6 +27,7 @@ func All() []store.Migration {
 	out = append(out, memory.StoreMigrations...)
 	out = append(out, memory.EpisodeMigrations...)
 	out = append(out, memory.KGMigrations...)
+	out = append(out, memory.GuardMigrations...)
 	return out
 }
 

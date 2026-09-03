@@ -105,6 +105,9 @@ type Config struct {
 	MemoryBitemporal    bool
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
+	MemorySecurity      bool
+	MemoryWriteRate     int
+	MemoryTrustFloor    float64
 	MemoryImportance    bool
 	MemorySimFloor      float64
 	PreferenceMemory    bool
@@ -257,6 +260,9 @@ func Load(getenv func(string) string) *Config {
 		MemoryBitemporal: boolean("MEMORY_BITEMPORAL_ENABLED", false),
 		MemoryKGPPR:      boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:  boolean("MEMORY_WRITE_RECONCILE", false),
+		MemorySecurity:   boolean("MEMORY_SECURITY_HARDENING", false),
+		MemoryWriteRate:  num("MEMORY_WRITE_RATE_PER_MIN", 30),
+		MemoryTrustFloor: float("MEMORY_TRUST_FLOOR", 0.35),
 
 		MemoryHybrid:     boolean("MEMORY_HYBRID_RETRIEVAL", false),
 		MemoryImportance: boolean("MEMORY_IMPORTANCE", false),

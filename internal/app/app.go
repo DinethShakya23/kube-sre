@@ -128,6 +128,9 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Loki: loki.New(cfg.LokiURL, blocked),
 	}
 	a.Memory = memory.NewStore(db, cfg)
+	if cfg.MemorySecurity {
+		a.Memory.Guard = memory.NewGuard(db, cfg.MemoryWriteRate, cfg.MemoryTrustFloor)
+	}
 	a.graph = newGraphFeed(a.Memory, 1000)
 	resolver := cluster.NewResolver(cfg.ClusterID, cfg.KubeconfigPath)
 	a.Agent = agent.New(agent.Deps{
