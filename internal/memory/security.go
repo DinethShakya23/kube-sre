@@ -285,19 +285,16 @@ func (g *Guard) Verify(ctx context.Context, clusterID string) recorder.Verdict {
 	if len(chain) > 0 && chain[0].Seq != 0 {
 		// The front is gone. Only a declared truncation that describes these rows
 		// turns that from tampering into housekeeping.
-		var resume int64
-		var prev string
-		err := g.DB.QueryRowContext(ctx, g.DB.Q(`SELECT resume_seq, resume_prev_hash FROM chain_truncation
-			WHERE chain = 'memory_audit' AND scope_id = ? ORDER BY through_seq DESC LIMIT 1`), clusterID).Scan(&resume, &prev)
+		d := recorder.DeclaredStart(ctx, g.DB, "memory_audit", clusterID)
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return recorder.Verdict{Valid: false, Verified: true}
-		case err != nil:
+		case !d.Read:
 			return recorder.Verdict{Valid: true, Verified: false}
-		case resume != chain[0].Seq || prev != chain[0].PrevHash:
+		case !d.Found:
+			return recorder.Verdict{Valid: false, Verified: true}
+		case d.Seq != chain[0].Seq || d.PrevHash != chain[0].PrevHash:
 			return recorder.Verdict{Valid: false, Verified: true}
 		}
-		startSeq, startPrev = resume, prev
+		startSeq, startPrev = d.Seq, d.PrevHash
 	}
 	if !recorder.VerifyChain(chain, startSeq, startPrev) {
 		return recorder.Verdict{Valid: false, Verified: true}

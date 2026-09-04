@@ -155,6 +155,8 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Server.Perception = a.Perception
 	a.Server.Health["sensorium"] = a.Perception.Status
 	a.Server.Audit = a.Audit
+	a.Server.Memory = a.Memory
+	a.Server.Recorder = a.Recorder
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
 	a.Server.Health["memory"] = a.memoryStatus

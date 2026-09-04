@@ -14,9 +14,11 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/audit"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/events"
+	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/metrics"
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
 	"github.com/DinethShakya23/kube-sre/internal/perception"
+	"github.com/DinethShakya23/kube-sre/internal/recorder"
 )
 
 // StatusFunc reports the state of one subsystem for /healthz.
@@ -28,6 +30,9 @@ type Server struct {
 	Agent   *agent.Agent
 	Emitter *events.Emitter
 	Audit   *audit.Log
+	// Memory serves preferences, and Recorder serves durable episode replay.
+	Memory   *memory.Store
+	Recorder *recorder.Recorder
 	// Perception is the sensorium and detector service, when one runs.
 	Perception *perception.Service
 	Auth       *Authenticator
@@ -105,6 +110,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/events/replay/{session}", s.authed(s.replay))
 	mux.HandleFunc("GET /v1/namespaces", s.authed(s.namespaces))
 	mux.HandleFunc("GET /v1/findings", s.authed(s.findings))
+	mux.HandleFunc("GET /v1/preferences", s.authed(s.listPreferences))
+	mux.HandleFunc("PUT /v1/preferences", s.authed(s.setPreference))
+	mux.HandleFunc("DELETE /v1/preferences/{key}", s.authed(s.forgetPreference))
+	mux.HandleFunc("GET /v1/episodes/{id}/replay", s.authed(s.episodeReplay))
 	mux.HandleFunc("GET /v1/auth/whoami", s.authed(s.whoami))
 	mux.HandleFunc("POST /v1/auth/demo-keys", s.authed(s.mintKey))
 	for pattern, h := range s.routes {
