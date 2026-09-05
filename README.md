@@ -12,6 +12,9 @@ human to approve it.
 - Tools: `kubectl`, read only `helm`, Prometheus and Loki.
 - 27 built in playbooks, 20 of them with compiled detectors that need no model calls.
 - Every action is recorded in a tamper evident, hash chained decision log.
+- Remembers: past incidents and their fixes, operator preferences, and a temporal graph of what
+  runs where and what changed in the last 15 minutes. When any of it cannot be read, the model is
+  told so, so a failed read never looks like an empty one.
 
 ## Safety
 
@@ -35,6 +38,17 @@ It uses SQLite at `~/.kube-sre/kube-sre.db` unless Postgres is configured
 (`DATABASE_URL`, or `POSTGRES_HOST` and friends). `kube-sre db-init` creates the schema
 explicitly; `serve` also applies it on start.
 
+Talk to a running server from the terminal:
+
+```
+kube-sre chat                      # interactive; approvals are asked for on the spot
+kube-sre chat -q "why is web crashing?"
+kube-sre status                    # health of the recorder, sensorium, audit and memory
+kube-sre replay EPISODE_ID         # exit 0 intact, 3 broken, 4 could not be verified
+```
+
+They use `--server` / `KUBESRE_URL` (default `http://localhost:8000`) and `--key` / `KUBESRE_API_KEY`.
+
 Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`.
 
 | Setting | Meaning |
@@ -46,6 +60,8 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `REQUIRE_AUTH` | refuse to start with no keys configured |
 | `PROMETHEUS_URL`, `LOKI_URL` | metric and log sources |
 | `KUBECTL_BLOCKED_NAMESPACES` | namespaces the agent never touches |
+| `MEMORY_SECURITY_HARDENING` | screen user derived memory writes (rate limit, trust, injection patterns) and keep an audit chain |
+| `MEMORY_BITEMPORAL_ENABLED`, `MEMORY_KG_PPR`, `MEMORY_WRITE_RECONCILE` | graph event time, blast radius ranking, write reconciliation |
 
 With no keys configured every caller is `admin`, which is meant for local use.
 
@@ -54,7 +70,8 @@ With no keys configured every caller is `admin`, which is meant for local use.
 `POST /v1/chat/completions` streams Server Sent Events. Send `X-Session-ID` to keep a
 conversation; when the reply asks for approval, answer `yes` or `no` in the same session.
 Also: `GET /healthz`, `/readyz`, `/metrics`, `/v1/namespaces`, `/v1/auth/whoami`,
-`/v1/events/replay/{session}`.
+`/v1/events/replay/{session}` (this process only), `/v1/episodes/{id}/replay` (durable, chain
+verified), `/v1/findings`, and `/v1/preferences` (GET; PUT and DELETE need `operator`).
 
 ## Tests
 

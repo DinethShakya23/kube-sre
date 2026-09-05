@@ -20,7 +20,13 @@ const usage = `kube-sre - AI powered Kubernetes operations
 usage:
   kube-sre serve [--host H] [--port P]   start the API server
   kube-sre db-init                       create or update the database schema
+  kube-sre chat [-q MSG] [flags]         talk to a running server
+  kube-sre status [flags]                show server health
+  kube-sre replay ID [flags]             replay a recorded episode
   kube-sre version                       print the version
+
+client flags: --server URL (default $KUBESRE_URL or http://localhost:8000),
+              --key KEY (default $KUBESRE_API_KEY), --user NAME
 
 config file: ~/.kube-sre/.env (or ./.env). Environment variables win over both.
 `
@@ -42,6 +48,12 @@ func run(args []string) int {
 		return serve(args[1:])
 	case "db-init":
 		return dbInit()
+	case "chat":
+		return chat(args[1:])
+	case "status":
+		return status(args[1:])
+	case "replay":
+		return replay(args[1:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return 0

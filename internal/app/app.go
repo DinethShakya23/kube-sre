@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/api"
@@ -169,6 +170,7 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 	// recorded, and reported as an outage rather than a setting.
 	a.Watchtower.Start(ctx)
 	go a.graph.Run(ctx)
+	go a.maintain(ctx, time.Hour)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
 	} else if err := a.Perception.Start(ctx); err != nil {
@@ -203,5 +205,23 @@ func (a *App) memoryStatus() map[string]any {
 		"counters":            a.Memory.Live.Counters(),
 		"graph_dropped":       a.graph.Dropped(),
 		"graph_queue_backlog": len(a.graph.queue),
+	}
+}
+
+// maintain runs the memory housekeeping passes: preference learning and the
+// forgetting of stale inferred ones. A failed pass is counted, never fatal.
+func (a *App) maintain(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if a.Cfg.PreferenceMemory {
+				a.Memory.InferFromBehaviour(ctx)
+				a.Memory.DecayAndForget(ctx)
+			}
+		}
 	}
 }
