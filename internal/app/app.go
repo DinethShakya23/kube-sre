@@ -173,9 +173,16 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 	go a.maintain(ctx, time.Hour)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
-	} else if err := a.Perception.Start(ctx); err != nil {
-		a.Perception.RecordStartFailure(err)
-		slog.Warn("sensorium failed to start, continuing without", "err", err)
+	} else {
+		// Off the startup path: working out the cluster identity shells out to kubectl,
+		// which can take seconds when the cluster is unreachable, and the API must not
+		// wait for that to accept traffic.
+		go func() {
+			if err := a.Perception.Start(ctx); err != nil {
+				a.Perception.RecordStartFailure(err)
+				slog.Warn("sensorium failed to start, continuing without", "err", err)
+			}
+		}()
 	}
 	// Everything above either succeeded or degraded on purpose, so accept traffic.
 	a.Server.SetReady(true)
