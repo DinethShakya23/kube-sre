@@ -271,3 +271,49 @@ func (s *Session) Loop(ctx context.Context) error {
 		}
 	}
 }
+
+// Digest fetches the morning digest as markdown.
+func (c *Client) Digest(ctx context.Context, hours float64) (string, error) {
+	resp, err := c.do(ctx, "GET", fmt.Sprintf("/v1/digest?format=markdown&hours=%g", hours), nil, nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", apiError(resp)
+	}
+	var out struct {
+		Markdown string `json:"markdown"`
+	}
+	return out.Markdown, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+// Postmortem fetches an episode's postmortem as markdown, with the exit code the
+// caller should use: 3 for a broken chain and 4 for one that was not verified,
+// the same convention as replay.
+func (c *Client) Postmortem(ctx context.Context, episode string) (string, int, error) {
+	resp, err := c.do(ctx, "GET", "/v1/episodes/"+episode+"/postmortem?format=markdown", nil, nil)
+	if err != nil {
+		return "", 1, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", 1, apiError(resp)
+	}
+	var out struct {
+		Markdown      string `json:"markdown"`
+		ChainValid    bool   `json:"chain_valid"`
+		ChainVerified bool   `json:"chain_verified"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", 1, err
+	}
+	code := 0
+	switch {
+	case !out.ChainVerified:
+		code = 4
+	case !out.ChainValid:
+		code = 3
+	}
+	return out.Markdown, code, nil
+}

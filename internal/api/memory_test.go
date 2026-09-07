@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DinethShakya23/kube-sre/internal/config"
+	"github.com/DinethShakya23/kube-sre/internal/digest"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
 	"github.com/DinethShakya23/kube-sre/internal/schema"
@@ -118,6 +119,45 @@ func TestEpisodeReplayNeverSaysNotFoundWhenItCannotTell(t *testing.T) {
 func TestEpisodeReplayWithoutARecorder(t *testing.T) {
 	r := newRig(t, nil)
 	if resp, _ := r.do(t, "GET", "/v1/episodes/x/replay", "", nil); resp.StatusCode != 503 {
+		t.Errorf("%d", resp.StatusCode)
+	}
+}
+
+func TestDigestAndPostmortemEndpoints(t *testing.T) {
+	r, rec := memRig(t, nil)
+	r.srv.Digest = &digest.Builder{DB: r.srv.Memory.DB, Cfg: r.srv.Cfg}
+	r.srv.Postmortem = &digest.PostmortemBuilder{Builder: *r.srv.Digest, Recorder: rec}
+	rec.Record("ep-9", "final", map[string]any{"text": "done"})
+	rec.Close()
+
+	resp, body := r.do(t, "GET", "/v1/digest?hours=12", "", nil)
+	if resp.StatusCode != 200 || !strings.Contains(body, `"window_hours":12`) {
+		t.Errorf("%d %s", resp.StatusCode, body)
+	}
+	if _, body = r.do(t, "GET", "/v1/digest?format=markdown", "", nil); !strings.Contains(body, "# kube-sre digest") {
+		t.Errorf("%s", body)
+	}
+	for _, bad := range []string{"hours=0", "hours=500", "hours=x", "format=xml"} {
+		if resp, _ = r.do(t, "GET", "/v1/digest?"+bad, "", nil); resp.StatusCode != 422 {
+			t.Errorf("%s: %d", bad, resp.StatusCode)
+		}
+	}
+
+	resp, body = r.do(t, "GET", "/v1/episodes/ep-9/postmortem", "", nil)
+	if resp.StatusCode != 200 || !strings.Contains(body, `"chain_valid":true`) {
+		t.Errorf("%d %s", resp.StatusCode, body)
+	}
+	_, body = r.do(t, "GET", "/v1/episodes/ep-9/postmortem?format=markdown", "", nil)
+	for _, want := range []string{`"markdown"`, `"chain_verified":true`, `"events_lost":0`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s in %s", want, body)
+		}
+	}
+}
+
+func TestPostmortemDisabled(t *testing.T) {
+	r, _ := memRig(t, map[string]string{"POSTMORTEM_ENABLED": "false"})
+	if resp, _ := r.do(t, "GET", "/v1/episodes/x/postmortem", "", nil); resp.StatusCode != 404 {
 		t.Errorf("%d", resp.StatusCode)
 	}
 }

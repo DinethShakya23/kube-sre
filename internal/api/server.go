@@ -13,6 +13,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
 	"github.com/DinethShakya23/kube-sre/internal/config"
+	"github.com/DinethShakya23/kube-sre/internal/digest"
 	"github.com/DinethShakya23/kube-sre/internal/events"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/metrics"
@@ -33,6 +34,9 @@ type Server struct {
 	// Memory serves preferences, and Recorder serves durable episode replay.
 	Memory   *memory.Store
 	Recorder *recorder.Recorder
+	// Digest and Postmortem build the recorder backed reports.
+	Digest     *digest.Builder
+	Postmortem *digest.PostmortemBuilder
 	// Perception is the sensorium and detector service, when one runs.
 	Perception *perception.Service
 	Auth       *Authenticator
@@ -114,6 +118,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/preferences", s.authed(s.setPreference))
 	mux.HandleFunc("DELETE /v1/preferences/{key}", s.authed(s.forgetPreference))
 	mux.HandleFunc("GET /v1/episodes/{id}/replay", s.authed(s.episodeReplay))
+	mux.HandleFunc("GET /v1/episodes/{id}/postmortem", s.authed(s.postmortemHandler))
+	mux.HandleFunc("GET /v1/digest", s.authed(s.digestHandler))
 	mux.HandleFunc("GET /v1/auth/whoami", s.authed(s.whoami))
 	mux.HandleFunc("POST /v1/auth/demo-keys", s.authed(s.mintKey))
 	for pattern, h := range s.routes {

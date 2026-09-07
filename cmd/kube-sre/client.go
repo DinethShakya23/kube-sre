@@ -95,3 +95,33 @@ func replay(args []string) int {
 	}
 	return code
 }
+
+func digestCmd(args []string) int {
+	fs, server, key, user := clientFlags("digest")
+	hours := fs.Float64("hours", 24, "window in hours (up to 168)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	md, err := client.New(*server, *key, *user).Digest(context.Background(), *hours)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	fmt.Println(md)
+	return 0
+}
+
+func postmortemCmd(args []string) int {
+	fs, server, key, user := clientFlags("postmortem")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: kube-sre postmortem [flags] EPISODE_ID")
+		return 2
+	}
+	md, code, err := client.New(*server, *key, *user).Postmortem(context.Background(), fs.Arg(0))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	fmt.Println(md)
+	return code
+}

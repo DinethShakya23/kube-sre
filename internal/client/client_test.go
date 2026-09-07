@@ -121,3 +121,32 @@ func TestStatusSummary(t *testing.T) {
 		t.Errorf("%q %v %v", text, ok, err)
 	}
 }
+
+func TestPostmortemExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		code int
+	}{
+		{`{"markdown":"# pm","chain_valid":true,"chain_verified":true}`, 0},
+		{`{"markdown":"# pm","chain_valid":false,"chain_verified":true}`, 3},
+		{`{"markdown":"# pm","chain_valid":false,"chain_verified":false}`, 4},
+	} {
+		c := sseServer(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, tc.body) })
+		md, code, err := c.Postmortem(context.Background(), "e")
+		if err != nil || code != tc.code || md != "# pm" {
+			t.Errorf("%s: %q %d %v", tc.body, md, code, err)
+		}
+	}
+}
+
+func TestDigestFetchesMarkdown(t *testing.T) {
+	var path string
+	c := sseServer(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.RequestURI()
+		io.WriteString(w, `{"markdown":"# digest"}`)
+	})
+	md, err := c.Digest(context.Background(), 12)
+	if err != nil || md != "# digest" || !strings.Contains(path, "hours=12") || !strings.Contains(path, "format=markdown") {
+		t.Errorf("%q %v %s", md, err, path)
+	}
+}

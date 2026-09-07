@@ -23,6 +23,8 @@ usage:
   kube-sre chat [-q MSG] [flags]         talk to a running server
   kube-sre status [flags]                show server health
   kube-sre replay ID [flags]             replay a recorded episode
+  kube-sre digest [--hours N] [flags]    what happened while you were away
+  kube-sre postmortem ID [flags]         grounded postmortem of an episode
   kube-sre version                       print the version
 
 client flags: --server URL (default $KUBESRE_URL or http://localhost:8000),
@@ -54,6 +56,10 @@ func run(args []string) int {
 		return status(args[1:])
 	case "replay":
 		return replay(args[1:])
+	case "digest":
+		return digestCmd(args[1:])
+	case "postmortem":
+		return postmortemCmd(args[1:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return 0
