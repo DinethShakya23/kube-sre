@@ -90,6 +90,8 @@ type Config struct {
 	Problems []string
 
 	PredictiveDetection    bool
+	NLDetectorAuthoring    bool
+	DBDetectorRefreshSecs  int
 	PredictiveTrendSeconds int
 
 	// Autonomy: A0 observe, A1 investigate and report, A2 propose, A3 auto fix
@@ -251,6 +253,8 @@ func Load(getenv func(string) string) *Config {
 		CoordinatorRecursions: num("AGENT_COORDINATOR_RECURSION_LIMIT", 150),
 
 		PredictiveDetection:    boolean("PREDICTIVE_DETECTION_ENABLED", false),
+		NLDetectorAuthoring:    boolean("NL_DETECTOR_AUTHORING_ENABLED", false),
+		DBDetectorRefreshSecs:  num("DB_DETECTOR_REFRESH_SECONDS", 120),
 		PredictiveTrendSeconds: anyInt("PREDICTIVE_TREND_INTERVAL_SECONDS", 60),
 
 		Watchtower:          boolean("WATCHTOWER_ENABLED", true),

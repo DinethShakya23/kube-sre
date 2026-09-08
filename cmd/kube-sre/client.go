@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/client"
@@ -124,4 +127,62 @@ func postmortemCmd(args []string) int {
 	}
 	fmt.Println(md)
 	return code
+}
+
+// detectorCmd manages the detector queue: list, new, promote, demote, shadow.
+func detectorCmd(args []string) int {
+	fs, server, key, user := clientFlags("detector")
+	status := fs.String("status", "", "list: only this status (candidate, shadow, active, demoted)")
+	name := fs.String("name", "", "new: name for the detector")
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: kube-sre detector list|new|promote|demote|shadow [flags] [DESCRIPTION|NAME]")
+		return 2
+	}
+	sub := args[0]
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+	c := client.New(*server, *key, *user)
+	var method, path string
+	var body []byte
+	switch sub {
+	case "list":
+		method, path = "GET", "/v1/detectors"
+		if *status != "" {
+			path += "?status=" + *status
+		}
+	case "new":
+		if fs.NArg() < 1 {
+			fmt.Fprintln(os.Stderr, "usage: kube-sre detector new [--name N] \"description of the failure\"")
+			return 2
+		}
+		method, path = "POST", "/v1/detectors"
+		body, _ = json.Marshal(map[string]string{"description": strings.Join(fs.Args(), " "), "name": *name})
+	case "promote", "demote", "shadow":
+		if fs.NArg() != 1 {
+			fmt.Fprintf(os.Stderr, "usage: kube-sre detector %s NAME\n", sub)
+			return 2
+		}
+		method, path = "POST", "/v1/detectors/"+fs.Arg(0)+"/"+sub
+		if sub == "shadow" {
+			method, path = "GET", "/v1/detectors/"+fs.Arg(0)+"/shadow-findings"
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "unknown detector command %q\n", sub)
+		return 2
+	}
+	code, out, err := c.Raw(context.Background(), method, path, body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	var pretty bytes.Buffer
+	if json.Indent(&pretty, out, "", "  ") == nil {
+		out = pretty.Bytes()
+	}
+	fmt.Println(string(out))
+	if code >= 400 {
+		return 1
+	}
+	return 0
 }

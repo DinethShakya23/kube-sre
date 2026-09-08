@@ -317,3 +317,15 @@ func (c *Client) Postmortem(ctx context.Context, episode string) (string, int, e
 	}
 	return out.Markdown, code, nil
 }
+
+// Raw sends a request and returns the status and body, for the detector commands
+// whose answers are printed as they come.
+func (c *Client) Raw(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
+	resp, err := c.do(ctx, method, path, body, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, err
+}

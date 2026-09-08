@@ -13,6 +13,7 @@ package schema
 import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
+	"github.com/DinethShakya23/kube-sre/internal/detectstore"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
 	"github.com/DinethShakya23/kube-sre/internal/store"
@@ -28,6 +29,7 @@ func All() []store.Migration {
 	out = append(out, memory.EpisodeMigrations...)
 	out = append(out, memory.KGMigrations...)
 	out = append(out, memory.GuardMigrations...)
+	out = append(out, detectstore.Migrations...)
 	return out
 }
 

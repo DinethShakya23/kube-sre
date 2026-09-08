@@ -25,6 +25,7 @@ usage:
   kube-sre replay ID [flags]             replay a recorded episode
   kube-sre digest [--hours N] [flags]    what happened while you were away
   kube-sre postmortem ID [flags]         grounded postmortem of an episode
+  kube-sre detector list|new|promote|demote|shadow   manage authored detectors
   kube-sre version                       print the version
 
 client flags: --server URL (default $KUBESRE_URL or http://localhost:8000),
@@ -60,6 +61,8 @@ func run(args []string) int {
 		return digestCmd(args[1:])
 	case "postmortem":
 		return postmortemCmd(args[1:])
+	case "detector":
+		return detectorCmd(args[1:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return 0

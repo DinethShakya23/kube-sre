@@ -15,6 +15,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/autonomy"
 	"github.com/DinethShakya23/kube-sre/internal/cluster"
 	"github.com/DinethShakya23/kube-sre/internal/config"
+	"github.com/DinethShakya23/kube-sre/internal/detectstore"
 	"github.com/DinethShakya23/kube-sre/internal/digest"
 	"github.com/DinethShakya23/kube-sre/internal/events"
 	"github.com/DinethShakya23/kube-sre/internal/helm"
@@ -159,6 +160,9 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Server.Audit = a.Audit
 	a.Server.Memory = a.Memory
 	a.Server.Recorder = a.Recorder
+	detectors := detectstore.New(db)
+	a.Server.Detectors, a.Server.Compiler = detectors, sub
+	a.Perception.StoredDetectors = detectors.Load
 	report := digest.Builder{DB: db, Cfg: cfg, Perception: a.Perception.State}
 	a.Server.Digest = &report
 	a.Server.Postmortem = &digest.PostmortemBuilder{Builder: report, Recorder: a.Recorder, Narrator: sub}

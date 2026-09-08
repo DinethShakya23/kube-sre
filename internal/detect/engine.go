@@ -73,13 +73,14 @@ type Engine struct {
 	predictedFired map[key]float64
 	findings       []Finding
 	shadowFindings []Finding
+	base           []DetectBlock
 	blindSince     float64
 	lastTrendError string
 }
 
 func NewEngine(clusterID string, detectors []DetectBlock) *Engine {
 	return &Engine{
-		Detectors: detectors, ClusterID: clusterID,
+		Detectors: detectors, base: append([]DetectBlock(nil), detectors...), ClusterID: clusterID,
 		states: map[key]*keyState{}, shadowStates: map[key]*keyState{}, predictedFired: map[key]float64{},
 	}
 }
@@ -496,4 +497,35 @@ func clip(s string, n int) string {
 		return string(r[:n])
 	}
 	return s
+}
+
+// SetStoredDetectors swaps in the detectors loaded from the store: active ones join
+// the playbook compiled base, shadow ones fire only into the candidate buffer.
+func (e *Engine) SetStoredDetectors(active, shadow []DetectBlock) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.Detectors = append(append([]DetectBlock(nil), e.base...), active...)
+	e.Shadow = shadow
+}
+
+// ShadowRing describes the shadow findings buffer. It is fixed size and in memory:
+// a restart empties it and, once saturated, it drops the oldest firing per new one,
+// so a shadow findings list is a floor and never a total.
+func (e *Engine) ShadowRing() (held, capacity int, saturated bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.shadowFindings), findingsRingSize, len(e.shadowFindings) >= findingsRingSize
+}
+
+// ShadowBlock returns the loaded shadow detector of that name, if any.
+func (e *Engine) ShadowBlock(name string) *DetectBlock {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for i := range e.Shadow {
+		if e.Shadow[i].Playbook == name {
+			b := e.Shadow[i]
+			return &b
+		}
+	}
+	return nil
 }

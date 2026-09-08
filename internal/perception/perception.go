@@ -83,10 +83,12 @@ type Service struct {
 	// OnFinding is told about every finding, as it fires. It must not block.
 	OnFinding func(detect.Finding)
 	// Observe also sees every observation, after the detectors have.
-	Observe  func(sensorium.Observation)
-	Series   detect.SeriesSource
-	Recorder detect.Recorder
-	Bin      string
+	Observe func(sensorium.Observation)
+	// StoredDetectors loads promoted and shadow detectors; nil when authoring is off.
+	StoredDetectors func(ctx context.Context, clusterID string) (active, shadow []detect.DetectBlock, err error)
+	Series          detect.SeriesSource
+	Recorder        detect.Recorder
+	Bin             string
 
 	mu      sync.Mutex
 	engine  *detect.Engine
@@ -95,6 +97,9 @@ type Service struct {
 	detail  string
 	cancel  context.CancelFunc
 	done    sync.WaitGroup
+	// lastStored is the count as of the last successful refresh; nil until one has
+	// completed, which is not the same as the last refresh finding nothing.
+	lastStored *[2]int
 }
 
 func NewService(cfg *config.Config, pb *playbooks.Registry) *Service {
@@ -164,6 +169,24 @@ func (s *Service) Start(ctx context.Context) error {
 		go func() { defer s.done.Done(); eng.RunTrends(runCtx, interval) }()
 		slog.Info("sensorium predictive detection on", "trend_interval", interval)
 	}
+	if s.Cfg.NLDetectorAuthoring && s.StoredDetectors != nil {
+		s.refreshStored(runCtx, eng, clusterID)
+		interval := time.Duration(s.Cfg.DBDetectorRefreshSecs) * time.Second
+		s.done.Add(1)
+		go func() {
+			defer s.done.Done()
+			t := time.NewTicker(interval)
+			defer t.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-t.C:
+					s.refreshStored(runCtx, eng, clusterID)
+				}
+			}
+		}()
+	}
 	go func() {
 		defer s.done.Done()
 		w.Run(runCtx, func(o sensorium.Observation) {
@@ -186,7 +209,7 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Stop(reason, detail string) {
 	s.mu.Lock()
 	cancel := s.cancel
-	s.cancel, s.engine = nil, nil
+	s.cancel, s.engine, s.lastStored = nil, nil, nil
 	if reason == "" {
 		reason = StoppedReason
 	}
@@ -390,4 +413,39 @@ func streamReasons(streams []sensorium.StreamHealth) string {
 		return "no reason recorded"
 	}
 	return strings.Join(parts, "; ")
+}
+
+// refreshStored reloads promoted and shadow detectors into the engine. A failed
+// read keeps the set already loaded: a read that failed says nothing about which
+// detectors should be live, and replacing a working set with the empty one a failed
+// read returns is not failing open, it is disarming.
+func (s *Service) refreshStored(ctx context.Context, eng *detect.Engine, clusterID string) {
+	active, shadow, err := s.StoredDetectors(ctx, clusterID)
+	if err != nil {
+		kept := [2]int{}
+		s.mu.Lock()
+		if s.lastStored != nil {
+			kept = *s.lastStored
+		}
+		s.mu.Unlock()
+		slog.Warn("stored detector refresh failed, keeping the set already loaded", "active", kept[0], "shadow", kept[1], "err", err)
+		return
+	}
+	eng.SetStoredDetectors(active, shadow)
+	counts := [2]int{len(active), len(shadow)}
+	s.mu.Lock()
+	prev := s.lastStored
+	s.lastStored = &counts
+	s.mu.Unlock()
+	// Logged on the first refresh and on every change, never on an unchanged steady
+	// state. The first refresh has to speak even at zero loaded: that is exactly what
+	// a cluster id mismatch looks like, and it is indistinguishable from nobody having
+	// authored a detector unless the line is emitted at least once.
+	if prev == nil || *prev != counts {
+		was := "startup"
+		if prev != nil {
+			was = fmt.Sprintf("%d/%d", prev[0], prev[1])
+		}
+		slog.Info("stored detectors", "active", counts[0], "shadow", counts[1], "was", was, "cluster", clusterID)
+	}
 }

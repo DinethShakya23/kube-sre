@@ -2,6 +2,7 @@ package perception
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,5 +213,36 @@ func TestQueueStatsSurviveAStop(t *testing.T) {
 	s.Stop("", "")
 	if q := s.Queue(); q.MaxSize != 10000 {
 		t.Errorf("%+v", q)
+	}
+}
+
+func TestStoredDetectorRefreshKeepsTheLoadedSetOnAFailedRead(t *testing.T) {
+	cfg := config.Load(func(string) string { return "" })
+	s := NewService(cfg, playbooks.Load())
+	eng := detect.NewEngine("c", nil)
+	block := detect.DetectBlock{Playbook: "nl:a"}
+	var fail bool
+	s.StoredDetectors = func(context.Context, string) ([]detect.DetectBlock, []detect.DetectBlock, error) {
+		if fail {
+			return nil, nil, errors.New("store down")
+		}
+		return []detect.DetectBlock{block}, []detect.DetectBlock{{Playbook: "nl:b"}}, nil
+	}
+	s.refreshStored(context.Background(), eng, "c")
+	if len(eng.Detectors) != 1 || len(eng.Shadow) != 1 {
+		t.Fatalf("%d %d", len(eng.Detectors), len(eng.Shadow))
+	}
+	fail = true
+	s.refreshStored(context.Background(), eng, "c")
+	if len(eng.Detectors) != 1 || len(eng.Shadow) != 1 {
+		t.Errorf("a failed read disarmed the engine: %d %d", len(eng.Detectors), len(eng.Shadow))
+	}
+	fail = false
+	s.StoredDetectors = func(context.Context, string) ([]detect.DetectBlock, []detect.DetectBlock, error) {
+		return nil, nil, nil
+	}
+	s.refreshStored(context.Background(), eng, "c")
+	if len(eng.Detectors) != 0 || len(eng.Shadow) != 0 {
+		t.Errorf("a successful empty read should clear them: %d %d", len(eng.Detectors), len(eng.Shadow))
 	}
 }
