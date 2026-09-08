@@ -164,3 +164,22 @@ func TestOOMKilledCarriesATrendPredicate(t *testing.T) {
 		t.Errorf("%+v", tp)
 	}
 }
+
+func TestEveryShippedDetectorIsLiveAndHealthy(t *testing.T) {
+	for _, d := range Load().Detectors() {
+		for _, p := range d.WatchPredicates {
+			errs, err := detect.PredicateLivenessErrors(p, false)
+			if len(errs) > 0 || err != nil {
+				t.Errorf("%s can never fire: %v %v", d.Playbook, errs, err)
+			}
+			if errs := detect.PredicateHealthErrors(p); len(errs) > 0 {
+				t.Errorf("%s fires on healthy objects: %v", d.Playbook, errs)
+			}
+		}
+		for _, tp := range d.TrendPredicates {
+			if errs := detect.TrendLivenessErrors(tp); len(errs) > 0 {
+				t.Errorf("%s: %v", d.Playbook, errs)
+			}
+		}
+	}
+}

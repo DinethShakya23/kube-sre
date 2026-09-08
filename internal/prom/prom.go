@@ -197,6 +197,14 @@ func (c *Client) QuerySeries(ctx context.Context, promql string, rangeMinutes in
 				s.Metric[k] = fmt.Sprint(v)
 			}
 		}
+		// An instant query answers with one value and a range query with many.
+		if pair, ok := m["value"].([]any); ok && len(pair) >= 2 {
+			ts, ok1 := pair[0].(float64)
+			val, err := strconv.ParseFloat(fmt.Sprint(pair[1]), 64)
+			if ok1 && err == nil {
+				s.Values = append(s.Values, [2]float64{ts, val})
+			}
+		}
 		if vals, ok := m["values"].([]any); ok {
 			for _, v := range vals {
 				pair, ok := v.([]any)
