@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/api"
@@ -47,7 +46,9 @@ type App struct {
 	Perception *perception.Service
 	Watchtower *autonomy.Watchtower
 	Memory     *memory.Store
-	graph      *graphFeed
+	// Consolidator runs the memory housekeeping passes.
+	Consolidator *memory.Consolidator
+	graph        *graphFeed
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -135,16 +136,23 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		a.Memory.Guard = memory.NewGuard(db, cfg.MemoryWriteRate, cfg.MemoryTrustFloor)
 	}
 	a.graph = newGraphFeed(a.Memory, 1000)
+	pb := playbooks.Load()
+	a.Consolidator = &memory.Consolidator{Store: a.Memory, DetectFor: func(name string) ([]string, int, bool) {
+		p := pb.Get(name)
+		if p == nil || p.Detect == nil {
+			return nil, 0, false
+		}
+		return p.Detect.PromQL, p.Detect.DebounceSeconds, true
+	}}
 	resolver := cluster.NewResolver(cfg.ClusterID, cfg.KubeconfigPath)
 	a.Agent = agent.New(agent.Deps{
 		Cfg: cfg, Tools: tools, Coordinator: coord, Subagent: sub, Emitter: a.Emitter,
 		Checkpoints: &agent.DBCheckpoints{DB: db},
 		Snapshot:    &agent.Snapshotter{Bin: "kubectl", Kubeconfig: cfg.KubeconfigPath, Timeout: cfg.KubectlTimeout, Blocked: blocked},
-		Playbooks:   playbooks.Load(),
+		Playbooks:   pb,
 		Memory:      newMemoryAdapter(a.Memory),
 		ClusterID:   resolver.Resolve,
 	})
-	pb := a.Agent.Playbooks
 	a.Perception = perception.NewService(cfg, pb)
 	a.Perception.ClusterID = resolver.Resolve
 	a.Perception.Recorder = a.Recorder
@@ -178,7 +186,7 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 	// recorded, and reported as an outage rather than a setting.
 	a.Watchtower.Start(ctx)
 	go a.graph.Run(ctx)
-	go a.maintain(ctx, time.Hour)
+	go a.Consolidator.Loop(ctx, memory.ConsolidationInterval)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
 	} else {
@@ -220,23 +228,5 @@ func (a *App) memoryStatus() map[string]any {
 		"counters":            a.Memory.Live.Counters(),
 		"graph_dropped":       a.graph.Dropped(),
 		"graph_queue_backlog": len(a.graph.queue),
-	}
-}
-
-// maintain runs the memory housekeeping passes: preference learning and the
-// forgetting of stale inferred ones. A failed pass is counted, never fatal.
-func (a *App) maintain(ctx context.Context, every time.Duration) {
-	t := time.NewTicker(every)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if a.Cfg.PreferenceMemory {
-				a.Memory.InferFromBehaviour(ctx)
-				a.Memory.DecayAndForget(ctx)
-			}
-		}
 	}
 }

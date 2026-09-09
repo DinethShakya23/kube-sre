@@ -108,6 +108,11 @@ type Config struct {
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
 	MemorySecurity      bool
+	MemoryPromotion     bool
+	MemorySummaryTree   bool
+	MemorySummaryMin    int
+	MemoryProspective   bool
+	MemoryRetentionDays int
 	PostmortemEnabled   bool
 	PostmortemNarrative bool
 	MemoryWriteRate     int
@@ -267,6 +272,11 @@ func Load(getenv func(string) string) *Config {
 		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
 		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
+		MemoryPromotion:     boolean("MEMORY_PROMOTION", false),
+		MemorySummaryTree:   boolean("MEMORY_SUMMARY_TREE", false),
+		MemorySummaryMin:    num("MEMORY_SUMMARY_MIN_CLUSTER", 3),
+		MemoryProspective:   boolean("MEMORY_PROSPECTIVE", false),
+		MemoryRetentionDays: numMin("MEMORY_RETENTION_DAYS", 0, 0),
 		PostmortemEnabled:   boolean("POSTMORTEM_ENABLED", true),
 		PostmortemNarrative: boolean("POSTMORTEM_LLM_NARRATIVE", false),
 		MemoryWriteRate:     num("MEMORY_WRITE_RATE_PER_MIN", 30),

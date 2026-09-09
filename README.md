@@ -68,6 +68,7 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `NL_DETECTOR_AUTHORING_ENABLED`, `DB_DETECTOR_REFRESH_SECONDS` | plain English detectors: staged as shadow, promoted by a human, reloaded without a restart |
 | `POSTMORTEM_ENABLED`, `POSTMORTEM_LLM_NARRATIVE` | postmortems on by default; optional model written prose over the timeline |
 | `MEMORY_SECURITY_HARDENING` | screen user derived memory writes (rate limit, trust, injection patterns) and keep an audit chain |
+| `MEMORY_PROMOTION`, `MEMORY_SUMMARY_TREE`, `MEMORY_SUMMARY_MIN_CLUSTER` | learned IF-THEN rules from verified recurring fixes, and per-theme summaries rebuilt only when a theme changes |
 | `MEMORY_BITEMPORAL_ENABLED`, `MEMORY_KG_PPR`, `MEMORY_WRITE_RECONCILE` | graph event time, blast radius ranking, write reconciliation |
 
 With no keys configured every caller is `admin`, which is meant for local use.

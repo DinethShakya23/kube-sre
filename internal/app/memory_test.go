@@ -64,3 +64,34 @@ func TestGraphFeedShedsAndCounts(t *testing.T) {
 		t.Errorf("dropped %d queued %d", g.Dropped(), len(g.queue))
 	}
 }
+
+func TestLoadInjectsRulesAndThemesWhenEnabledAndSaysWhenTheyFail(t *testing.T) {
+	db := storetest.New(t, memory.StoreMigrations, memory.EpisodeMigrations, memory.KGMigrations, memory.RuleMigrations)
+	cfg := config.Load(func(k string) string {
+		return map[string]string{"MEMORY_PROMOTION": "true", "MEMORY_SUMMARY_TREE": "true"}[k]
+	})
+	store := memory.NewStore(db, cfg)
+	m := newMemoryAdapter(store)
+	ctx := context.Background()
+	store.RecordRule(ctx, "c1", "OOMKilled", "raise the memory limit", "episode", 0.5, 1)
+	store.RecordRule(ctx, "c1", "OOMKilled", "raise the memory limit", "episode", 0.5, 1)
+	ok := true
+	for i := 0; i < 3; i++ {
+		store.WriteEpisode(ctx, memory.EpisodeInput{ClusterID: "c1", TriggerKind: "detector", Summary: "OOMKilled again in payments", RootCause: "limit",
+			Playbooks: []string{"OOMKilled"}, Verified: &ok, Outcome: "resolved", StartedAt: float64(1000 + i)})
+	}
+	store.BuildSummaryTree(ctx)
+
+	got := m.Load(ctx, agent.LoadRequest{UserID: "u", ClusterID: "c1", Query: "OOMKilled payments"})
+	if !strings.Contains(got, "## Learned rules (this cluster)") || !strings.Contains(got, "IF OOMKilled THEN raise the memory limit") ||
+		!strings.Contains(got, "## Memory themes (this cluster)") {
+		t.Errorf("%s", got)
+	}
+
+	_, _ = db.Exec(`DROP TABLE semantic_rules`)
+	_, _ = db.Exec(`DROP TABLE memory_summaries`)
+	got = m.Load(ctx, agent.LoadRequest{UserID: "u", ClusterID: "c1", Query: "OOMKilled payments"})
+	if !strings.Contains(got, "Learned rules unavailable") || !strings.Contains(got, "Memory themes unavailable") {
+		t.Errorf("failures must be announced:\n%s", got)
+	}
+}

@@ -26,6 +26,9 @@ func newMemoryAdapter(s *memory.Store) *memoryAdapter {
 const (
 	recallUnavailable = "## Similar past episodes unavailable\nPast episodes could NOT be searched - this is not the same as there being " +
 		"none. Do not assume this issue has no precedent."
+	rulesUnavailable = "## Learned rules unavailable\nThe learned rules for this cluster could NOT be read - this is not the same as there being " +
+		"none. Do not assume no remediation has been learned."
+	themesUnavailable  = "## Memory themes unavailable\nTheme summaries could NOT be read - this is not the same as there being none."
 	changesUnavailable = "## Recent cluster changes unavailable\nThe cluster change log could NOT be read - this is not the same as nothing " +
 		"having changed. Do not tell the user the cluster has been quiet."
 )
@@ -48,6 +51,23 @@ func (m *memoryAdapter) Load(ctx context.Context, req agent.LoadRequest) string 
 			if block := memory.RenderRecallBlock(eps); block != "" {
 				parts = append(parts, block)
 			}
+		}
+	}
+
+	if m.store.Cfg.MemoryPromotion {
+		rules, err := m.store.ActiveRules(ctx, req.ClusterID, 10)
+		if err != nil {
+			parts = append(parts, rulesUnavailable)
+		} else if block := memory.RenderRulesBlock(rules); block != "" {
+			parts = append(parts, block)
+		}
+	}
+	if m.store.Cfg.MemorySummaryTree && strings.TrimSpace(req.Query) != "" {
+		sums, err := m.store.RecallThemeSummaries(ctx, req.Query, req.ClusterID, 3)
+		if err != nil {
+			parts = append(parts, themesUnavailable)
+		} else if block := memory.RenderSummariesBlock(sums); block != "" {
+			parts = append(parts, block)
 		}
 	}
 
