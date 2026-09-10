@@ -108,6 +108,10 @@ type Config struct {
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
 	MemorySecurity      bool
+	CortexV5            bool
+	ChangeFirstRCA      bool
+	ChangeLedger        bool
+	Writeback           bool
 	MemoryPromotion     bool
 	MemorySummaryTree   bool
 	MemorySummaryMin    int
@@ -272,6 +276,10 @@ func Load(getenv func(string) string) *Config {
 		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
 		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
+		CortexV5:            boolean("CORTEX_V5_ENABLED", false),
+		ChangeFirstRCA:      boolean("KI_V5_CHANGE_FIRST_RCA", false),
+		ChangeLedger:        boolean("KI_V5_CHANGE_LEDGER", false),
+		Writeback:           boolean("KI_V5_INVESTIGATION_WRITEBACK", false),
 		MemoryPromotion:     boolean("MEMORY_PROMOTION", false),
 		MemorySummaryTree:   boolean("MEMORY_SUMMARY_TREE", false),
 		MemorySummaryMin:    num("MEMORY_SUMMARY_MIN_CLUSTER", 3),

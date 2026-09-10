@@ -228,11 +228,12 @@ func resolveConfidence(hasPlaybook bool, verified *bool) float64 {
 // maybeRecordDirectOutcome persists a structured, verified outcome when a direct
 // answer mutated state. It runs after the answer is delivered, off the request path.
 func (a *Agent) maybeRecordDirectOutcome(ctx context.Context, st *State, msgs []llm.Message) {
-	if !a.Cfg.Reflexion {
-		return
-	}
 	cmds := ranMutation(msgs)
-	if len(cmds) == 0 {
+	if len(cmds) > 0 && a.Cfg.CortexV5 && a.Cfg.ChangeLedger && a.Changes != nil {
+		// So change first RCA can rank what was just applied on a later investigation.
+		a.Changes.RecordCommands(st.ClusterID, cmds, float64(a.Now().UnixNano())/1e9, "")
+	}
+	if !a.Cfg.Reflexion || len(cmds) == 0 {
 		return
 	}
 	pairs := a.mutationPairs(msgs)

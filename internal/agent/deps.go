@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/DinethShakya23/kube-sre/internal/change"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/events"
 	"github.com/DinethShakya23/kube-sre/internal/llm"
@@ -74,6 +75,10 @@ type Deps struct {
 	Snapshot    *Snapshotter
 	Playbooks   *playbooks.Registry
 	Memory      Memory
+	// Changes is the change ledger; Writeback feeds an investigation's evidence back
+	// to the graph. Both are optional and gated by v5 flags.
+	Changes   *change.Ledger
+	Writeback func(ctx context.Context, cluster string, playbooks []string)
 	// ClusterID resolves the cluster identity; it is called once per turn.
 	ClusterID func(context.Context) string
 	Now       func() time.Time

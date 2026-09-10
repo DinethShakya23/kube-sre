@@ -12,8 +12,10 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/api"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
 	"github.com/DinethShakya23/kube-sre/internal/autonomy"
+	"github.com/DinethShakya23/kube-sre/internal/change"
 	"github.com/DinethShakya23/kube-sre/internal/cluster"
 	"github.com/DinethShakya23/kube-sre/internal/config"
+	"github.com/DinethShakya23/kube-sre/internal/detect"
 	"github.com/DinethShakya23/kube-sre/internal/detectstore"
 	"github.com/DinethShakya23/kube-sre/internal/digest"
 	"github.com/DinethShakya23/kube-sre/internal/events"
@@ -145,13 +147,26 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		return p.Detect.PromQL, p.Detect.DebounceSeconds, true
 	}}
 	resolver := cluster.NewResolver(cfg.ClusterID, cfg.KubeconfigPath)
+	snap := &agent.Snapshotter{Bin: "kubectl", Kubeconfig: cfg.KubeconfigPath, Timeout: cfg.KubectlTimeout, Blocked: blocked}
+	ladder := autonomy.Ladder{Cfg: cfg}
+	a.Consolidator.Extra = []memory.Pass{
+		{Name: "prospective_fired", Run: func(ctx context.Context) int {
+			return a.Memory.RunProspectiveOnce(ctx, ladder.LevelFor, func(l string) bool { return autonomy.AtLeast(l, "A1") }, recheckDispatch(snap))
+		}},
+		{Name: "rows_pruned", Run: a.Memory.PruneOnce},
+	}
+	ledger := change.NewLedger()
 	a.Agent = agent.New(agent.Deps{
 		Cfg: cfg, Tools: tools, Coordinator: coord, Subagent: sub, Emitter: a.Emitter,
 		Checkpoints: &agent.DBCheckpoints{DB: db},
-		Snapshot:    &agent.Snapshotter{Bin: "kubectl", Kubeconfig: cfg.KubeconfigPath, Timeout: cfg.KubectlTimeout, Blocked: blocked},
-		Playbooks:   pb,
-		Memory:      newMemoryAdapter(a.Memory),
-		ClusterID:   resolver.Resolve,
+		Snapshot:    snap,
+		Changes:     ledger,
+		Writeback: func(ctx context.Context, cluster string, playbooks []string) {
+			a.Memory.ApplyWriteback(ctx, cluster, memory.SignalsFromInvestigation(cluster, playbooks))
+		},
+		Playbooks: pb,
+		Memory:    newMemoryAdapter(a.Memory),
+		ClusterID: resolver.Resolve,
 	})
 	a.Perception = perception.NewService(cfg, pb)
 	a.Perception.ClusterID = resolver.Resolve
@@ -160,6 +175,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	// Findings open their own investigations through the same turn machinery chat uses.
 	a.Watchtower = autonomy.NewWatchtower(cfg)
 	a.Watchtower.Prepare = a.Emitter.Prepare
+	a.Watchtower.AfterFix = func(f detect.Finding) { scheduleRecheck(a.Memory, cfg, resolver.Resolve, f) }
 	a.Watchtower.Investigate = a.Agent.Run
 	a.Perception.OnFinding = a.Watchtower.OnFinding
 	a.Server = api.NewServer(cfg, a.Agent, a.Emitter, Version)

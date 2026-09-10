@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DinethShakya23/kube-sre/internal/change"
 	"github.com/DinethShakya23/kube-sre/internal/events"
 	"github.com/DinethShakya23/kube-sre/internal/kube"
 	"github.com/DinethShakya23/kube-sre/internal/llm"
@@ -67,6 +68,11 @@ func (a *Agent) systemPrompt(st *State, bypass bool, historySummary string) stri
 	if a.Cfg.Playbooks {
 		if b := playbooksBlock(a.Playbooks, st.MatchedPlaybooks); b != "" {
 			parts = append(parts, b)
+		}
+	}
+	if a.Cfg.CortexV5 && a.Cfg.ChangeFirstRCA && a.Changes != nil {
+		if prior := change.RenderPrior(a.Changes.Recent(st.ClusterID, ""), 5, 0); prior != "" {
+			parts = append(parts, "\n\n"+prior)
 		}
 	}
 	if bypass {
@@ -356,6 +362,10 @@ func (a *Agent) synthesize(ctx context.Context, st *State) error {
 			Summary: clip(summary, 1200), EpisodeOutcome: "report_only",
 		}
 		a.recordAsync(func(ctx context.Context) { a.Memory.Record(ctx, out) })
+		if a.Cfg.CortexV5 && a.Cfg.Writeback && a.Writeback != nil && len(out.Playbooks) > 0 {
+			cluster, pbs := st.ClusterID, out.Playbooks
+			a.recordAsync(func(ctx context.Context) { a.Writeback(ctx, cluster, pbs) })
+		}
 		slog.Info("rca outcome scheduled", "session", st.SessionID, "confidence", rca.Confidence)
 	}
 	st.RCAResult, st.RCARequired = rca, false
