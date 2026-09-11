@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/agent"
@@ -52,6 +53,10 @@ type App struct {
 	// Consolidator runs the memory housekeeping passes.
 	Consolidator *memory.Consolidator
 	Service      *memory.Service
+	election     *store.Election
+	mu           sync.Mutex
+	stopWorkers  context.CancelFunc
+	schema       map[string]any
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -116,6 +121,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	a := &App{Cfg: cfg, DB: db}
+	a.schema = db.SchemaState(ctx, schema.All())
 	// The recorder degrades gracefully: Start never fails, and events recorded
 	// while it is down are written into the chain as a gap once it recovers.
 	a.Recorder = recorder.New(db, cfg.FlightRecorder, cfg.RedactSecrets)
@@ -200,32 +206,18 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
 	a.Server.Health["memory"] = a.Service.Status
+	a.Server.Health["db_schema"] = func() map[string]any { return a.schema }
 	return a, nil
 }
 
 // Serve accepts traffic until ctx ends, then shuts down in order.
 func (a *App) Serve(ctx context.Context, addr string) error {
-	// Perception failing must never cost availability: a start that raises is
-	// recorded, and reported as an outage rather than a setting.
 	a.Watchtower.Start(ctx)
 	go a.Service.Drain(ctx)
 	if a.Service.Guard != nil {
 		go a.Service.VerifyChainLoop(ctx, time.Duration(a.Cfg.MemoryChainVerifyS)*time.Second)
 	}
-	go a.Consolidator.Loop(ctx, memory.ConsolidationInterval)
-	if !a.Cfg.Sensorium {
-		a.Perception.RecordDisabled()
-	} else {
-		// Off the startup path: working out the cluster identity shells out to kubectl,
-		// which can take seconds when the cluster is unreachable, and the API must not
-		// wait for that to accept traffic.
-		go func() {
-			if err := a.Perception.Start(ctx); err != nil {
-				a.Perception.RecordStartFailure(err)
-				slog.Warn("sensorium failed to start, continuing without", "err", err)
-			}
-		}()
-	}
+	a.startWorkers(ctx)
 	// Everything above either succeeded or degraded on purpose, so accept traffic.
 	a.Server.SetReady(true)
 	slog.Info("listening", "addr", addr)
@@ -241,6 +233,9 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 
 // Close stops background work and closes the database.
 func (a *App) Close() {
+	if a.election != nil {
+		a.election.Stop()
+	}
 	a.Perception.Stop("", "")
 	a.Watchtower.Wait()
 	a.Recorder.Close()
@@ -255,4 +250,56 @@ func memoryFor(v *memory.Service, s *memory.Store) agent.Memory {
 		return nil
 	}
 	return newMemoryAdapter(s)
+}
+
+// startWorkers starts the singleton workers: the sensorium, the watchtower behind it
+// and consolidation. On Postgres they run only on the elected leader, so two replicas
+// never duplicate autonomous action. On SQLite there is one process by construction.
+func (a *App) startWorkers(ctx context.Context) {
+	if a.DB.Dialect != store.Postgres || !a.Cfg.LeaderElection {
+		reason := "no election - single process"
+		if a.DB.Dialect == store.Postgres {
+			reason = "LEADER_ELECTION_ENABLED=false"
+		}
+		a.Server.Health["leader"] = func() map[string]any { return store.SingleProcessStatus(reason) }
+		a.runSingletons(ctx)
+		return
+	}
+	a.election = &store.Election{DB: a.DB, Scope: a.Cfg.ClusterID, Poll: time.Duration(a.Cfg.LeaderPollSeconds) * time.Second,
+		OnAcquire: a.runSingletons, OnLose: func(context.Context) { a.stopSingletons() }}
+	a.Server.Health["leader"] = a.election.Status
+	a.Perception.RecordStandby()
+	a.election.Start(ctx)
+}
+
+func (a *App) runSingletons(parent context.Context) {
+	ctx, cancel := context.WithCancel(parent)
+	a.mu.Lock()
+	a.stopWorkers = cancel
+	a.mu.Unlock()
+	go a.Consolidator.Loop(ctx, memory.ConsolidationInterval)
+	if !a.Cfg.Sensorium {
+		a.Perception.RecordDisabled()
+		return
+	}
+	// Off the startup path: working out the cluster identity shells out to kubectl,
+	// which can take seconds when the cluster is unreachable.
+	go func() {
+		if err := a.Perception.Start(ctx); err != nil {
+			a.Perception.RecordStartFailure(err)
+			slog.Warn("sensorium failed to start, continuing without", "err", err)
+		}
+	}()
+}
+
+func (a *App) stopSingletons() {
+	a.mu.Lock()
+	cancel := a.stopWorkers
+	a.stopWorkers = nil
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	a.Perception.RecordStandby()
+	a.Perception.Stop(perception.Standby, "leadership lost or held by another replica")
 }

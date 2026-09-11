@@ -108,6 +108,8 @@ type Config struct {
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
 	MemorySecurity      bool
+	LeaderElection      bool
+	LeaderPollSeconds   int
 	MemoryHierarchy     bool
 	MemoryObsQueue      int
 	MemoryChainVerifyS  int
@@ -279,6 +281,8 @@ func Load(getenv func(string) string) *Config {
 		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
 		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
+		LeaderElection:      boolean("LEADER_ELECTION_ENABLED", true),
+		LeaderPollSeconds:   num("LEADER_ELECTION_POLL_SECONDS", 10),
 		MemoryHierarchy:     boolean("MEMORY_HIERARCHY_ENABLED", true),
 		MemoryObsQueue:      num("MEMORY_OBS_QUEUE_MAXSIZE", 10000),
 		MemoryChainVerifyS:  numMin("MEMORY_CHAIN_VERIFY_INTERVAL_S", 900, 0),

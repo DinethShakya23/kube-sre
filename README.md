@@ -67,6 +67,7 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `KUBECTL_BLOCKED_NAMESPACES` | namespaces the agent never touches |
 | `NL_DETECTOR_AUTHORING_ENABLED`, `DB_DETECTOR_REFRESH_SECONDS` | plain English detectors: staged as shadow, promoted by a human, reloaded without a restart |
 | `POSTMORTEM_ENABLED`, `POSTMORTEM_LLM_NARRATIVE` | postmortems on by default; optional model written prose over the timeline |
+| `LEADER_ELECTION_ENABLED`, `LEADER_ELECTION_POLL_SECONDS` | on Postgres only one replica runs the sensorium, watchtower and consolidation; the rest serve the API |
 | `MEMORY_SECURITY_HARDENING` | screen user derived memory writes (rate limit, trust, injection patterns) and keep an audit chain |
 | `MEMORY_PROMOTION`, `MEMORY_SUMMARY_TREE`, `MEMORY_SUMMARY_MIN_CLUSTER` | learned IF-THEN rules from verified recurring fixes, and per-theme summaries rebuilt only when a theme changes |
 | `MEMORY_PROSPECTIVE`, `MEMORY_RETENTION_DAYS` | post-fix re-checks that actually re-read the cluster; and pruning of telemetry (never the chained ledgers or episodes) |

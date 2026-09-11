@@ -449,3 +449,11 @@ func (s *Service) refreshStored(ctx context.Context, eng *detect.Engine, cluster
 		slog.Info("stored detectors", "active", counts[0], "shadow", counts[1], "was", was, "cluster", clusterID)
 	}
 }
+
+// RecordStandby notes that another replica holds the singleton lock. That is normal,
+// not an outage.
+func (s *Service) RecordStandby() {
+	s.mu.Lock()
+	s.reason, s.detail = Standby, "another replica holds the singleton lock"
+	s.mu.Unlock()
+}
