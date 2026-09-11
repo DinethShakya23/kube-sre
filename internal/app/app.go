@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/api"
@@ -50,7 +51,7 @@ type App struct {
 	Memory     *memory.Store
 	// Consolidator runs the memory housekeeping passes.
 	Consolidator *memory.Consolidator
-	graph        *graphFeed
+	Service      *memory.Service
 }
 
 // Check validates configuration and logs what would make the server misbehave.
@@ -137,7 +138,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	if cfg.MemorySecurity {
 		a.Memory.Guard = memory.NewGuard(db, cfg.MemoryWriteRate, cfg.MemoryTrustFloor)
 	}
-	a.graph = newGraphFeed(a.Memory, 1000)
+	a.Service = memory.NewService(a.Memory)
+	if g, ok := a.Memory.Guard.(*memory.Guard); ok {
+		a.Service.Guard = g
+	}
+	a.Service.ClusterID = func(ctx context.Context) string {
+		return cluster.NewResolver(cfg.ClusterID, cfg.KubeconfigPath).Resolve(ctx)
+	}
 	pb := playbooks.Load()
 	a.Consolidator = &memory.Consolidator{Store: a.Memory, DetectFor: func(name string) ([]string, int, bool) {
 		p := pb.Get(name)
@@ -171,7 +178,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Perception = perception.NewService(cfg, pb)
 	a.Perception.ClusterID = resolver.Resolve
 	a.Perception.Recorder = a.Recorder
-	a.Perception.Observe = a.graph.Offer
+	a.Perception.Observe = a.Service.Enqueue
 	// Findings open their own investigations through the same turn machinery chat uses.
 	a.Watchtower = autonomy.NewWatchtower(cfg)
 	a.Watchtower.Prepare = a.Emitter.Prepare
@@ -192,7 +199,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Server.Postmortem = &digest.PostmortemBuilder{Builder: report, Recorder: a.Recorder, Narrator: sub}
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
-	a.Server.Health["memory"] = a.memoryStatus
+	a.Server.Health["memory"] = a.Service.Status
 	return a, nil
 }
 
@@ -201,7 +208,10 @@ func (a *App) Serve(ctx context.Context, addr string) error {
 	// Perception failing must never cost availability: a start that raises is
 	// recorded, and reported as an outage rather than a setting.
 	a.Watchtower.Start(ctx)
-	go a.graph.Run(ctx)
+	go a.Service.Drain(ctx)
+	if a.Service.Guard != nil {
+		go a.Service.VerifyChainLoop(ctx, time.Duration(a.Cfg.MemoryChainVerifyS)*time.Second)
+	}
 	go a.Consolidator.Loop(ctx, memory.ConsolidationInterval)
 	if !a.Cfg.Sensorium {
 		a.Perception.RecordDisabled()
@@ -239,10 +249,10 @@ func (a *App) Close() {
 	}
 }
 
-func (a *App) memoryStatus() map[string]any {
-	return map[string]any{
-		"counters":            a.Memory.Live.Counters(),
-		"graph_dropped":       a.graph.Dropped(),
-		"graph_queue_backlog": len(a.graph.queue),
+// memoryFor gives the agent long term memory, or none when the hierarchy is off.
+func memoryFor(v *memory.Service, s *memory.Store) agent.Memory {
+	if !v.Active() {
+		return nil
 	}
+	return newMemoryAdapter(s)
 }

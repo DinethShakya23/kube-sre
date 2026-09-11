@@ -108,6 +108,9 @@ type Config struct {
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
 	MemorySecurity      bool
+	MemoryHierarchy     bool
+	MemoryObsQueue      int
+	MemoryChainVerifyS  int
 	CortexV5            bool
 	ChangeFirstRCA      bool
 	ChangeLedger        bool
@@ -276,6 +279,9 @@ func Load(getenv func(string) string) *Config {
 		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
 		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
+		MemoryHierarchy:     boolean("MEMORY_HIERARCHY_ENABLED", true),
+		MemoryObsQueue:      num("MEMORY_OBS_QUEUE_MAXSIZE", 10000),
+		MemoryChainVerifyS:  numMin("MEMORY_CHAIN_VERIFY_INTERVAL_S", 900, 0),
 		CortexV5:            boolean("CORTEX_V5_ENABLED", false),
 		ChangeFirstRCA:      boolean("KI_V5_CHANGE_FIRST_RCA", false),
 		ChangeLedger:        boolean("KI_V5_CHANGE_LEDGER", false),

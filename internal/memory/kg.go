@@ -63,6 +63,9 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_tx ON kg_edges (cluster_id, ingested_at,
 // prompt simply omitted its "Recent cluster changes" section, byte for byte what a
 // genuinely calm cluster produces. "What changed in the last fifteen minutes" is
 // the first question of an incident, and an outage answered it with "nothing did".
+// ErrKGWrite means an observation could not be written to the graph.
+var ErrKGWrite = errors.New("the knowledge graph could not be written")
+
 var ErrKGUnavailable = errors.New("the cluster change log could not be read")
 
 func attrsJSON(a map[string]any) string {
@@ -353,19 +356,19 @@ func ObservationRef(o sensorium.Observation) string {
 // pod entity with its last status, Pod runs_on Node (closed and reopened when the
 // pod moves), Workload owns Pod, and, on a DELETED watch event, every open edge
 // touching the pod closed.
-func (s *Store) IngestPodObservation(ctx context.Context, o sensorium.Observation) {
+func (s *Store) IngestPodObservation(ctx context.Context, o sensorium.Observation) error {
 	if o.Kind != "pod_status" {
-		return
+		return nil
 	}
 	ts := float64(o.TS.UnixNano()) / 1e9
 	// last_seen drives consolidation's stale edge pass.
 	pod := s.UpsertEntity(ctx, o.ClusterID, "Pod", o.Name, o.Namespace, map[string]any{"last_status": o.Str("status"), "last_seen": ts})
 	if pod == "" {
-		return
+		return ErrKGWrite
 	}
 	if o.Str("watch_type") == "DELETED" {
 		s.closeAllEdges(ctx, o.ClusterID, pod)
-		return
+		return nil
 	}
 	if node := o.Str("node"); node != "" {
 		if nodeID := s.UpsertEntity(ctx, o.ClusterID, "Node", node, "", nil); nodeID != "" {
@@ -382,6 +385,7 @@ func (s *Store) IngestPodObservation(ctx context.Context, o sensorium.Observatio
 			s.OpenEdge(ctx, o.ClusterID, w, "owns", pod, EdgeOpts{SourceID: ObservationRef(o), EventTime: ts})
 		}
 	}
+	return nil
 }
 
 // LinkIncident links a pod to an Incident entity: Pod crashed_with Incident.

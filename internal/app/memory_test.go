@@ -8,7 +8,6 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
-	"github.com/DinethShakya23/kube-sre/internal/sensorium"
 	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
 )
 
@@ -50,18 +49,6 @@ func TestLoadIsQuietWhenNothingHappened(t *testing.T) {
 	m := adapter(t)
 	if got := m.Load(context.Background(), agent.LoadRequest{UserID: "u", ClusterID: "c1", Query: "hello"}); got != "" {
 		t.Errorf("expected empty, got:\n%s", got)
-	}
-}
-
-func TestGraphFeedShedsAndCounts(t *testing.T) {
-	m := adapter(t)
-	g := newGraphFeed(m.store, 1)
-	pod := sensorium.Observation{Kind: "pod_status", ClusterID: "c1", Name: "a"}
-	g.Offer(pod)
-	g.Offer(pod)
-	g.Offer(sensorium.Observation{Kind: "event"})
-	if g.Dropped() != 1 || len(g.queue) != 1 {
-		t.Errorf("dropped %d queued %d", g.Dropped(), len(g.queue))
 	}
 }
 
