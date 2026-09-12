@@ -21,6 +21,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
 	"github.com/DinethShakya23/kube-sre/internal/detectstore"
+	"github.com/DinethShakya23/kube-sre/internal/fleet"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
 	"github.com/DinethShakya23/kube-sre/internal/store"
@@ -39,6 +40,7 @@ func All() []store.Migration {
 	out = append(out, memory.RuleMigrations...)
 	out = append(out, memory.ProspectiveMigrations...)
 	out = append(out, detectstore.Migrations...)
+	out = append(out, fleet.Migrations...)
 	return out
 }
 

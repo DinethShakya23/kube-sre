@@ -108,6 +108,10 @@ type Config struct {
 	MemoryKGPPR         bool
 	MemoryReconcile     bool
 	MemorySecurity      bool
+	FilePlane           bool
+	FilePlaneDir        string
+	FilePlaneMaxBytes   int
+	OtelSpans           bool
 	LeaderElection      bool
 	LeaderPollSeconds   int
 	MemoryHierarchy     bool
@@ -281,6 +285,10 @@ func Load(getenv func(string) string) *Config {
 		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
 		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
 		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
+		FilePlane:           boolean("KI_V5_FILE_PLANE", false),
+		FilePlaneDir:        str("KI_V5_FILE_PLANE_DIR", "ki-memory"),
+		FilePlaneMaxBytes:   num("KI_V5_FILE_PLANE_MAX_BYTES", 25000),
+		OtelSpans:           boolean("KI_V5_OTEL_SPANS_ENABLED", false),
 		LeaderElection:      boolean("LEADER_ELECTION_ENABLED", true),
 		LeaderPollSeconds:   num("LEADER_ELECTION_POLL_SECONDS", 10),
 		MemoryHierarchy:     boolean("MEMORY_HIERARCHY_ENABLED", true),

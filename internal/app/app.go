@@ -168,6 +168,11 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		}},
 		{Name: "rows_pruned", Run: a.Memory.PruneOnce},
 	}
+	if cfg.CortexV5 && cfg.FilePlane {
+		a.Consolidator.Extra = append(a.Consolidator.Extra, memory.Pass{Name: "file_plane_bytes", Run: func(ctx context.Context) int {
+			return a.Memory.RegenerateFilePlane(ctx, resolver.Resolve(ctx), cfg.FilePlaneDir, cfg.FilePlaneMaxBytes)
+		}})
+	}
 	ledger := change.NewLedger()
 	a.Agent = agent.New(agent.Deps{
 		Cfg: cfg, Tools: tools, Coordinator: coord, Subagent: sub, Emitter: a.Emitter,

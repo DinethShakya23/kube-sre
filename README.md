@@ -85,6 +85,7 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `MEMORY_PROMOTION`, `MEMORY_SUMMARY_TREE`, `MEMORY_SUMMARY_MIN_CLUSTER` | learned IF-THEN rules from verified recurring fixes, and per-theme summaries rebuilt only when a theme changes |
 | `MEMORY_PROSPECTIVE`, `MEMORY_RETENTION_DAYS` | post-fix re-checks that actually re-read the cluster; and pruning of telemetry (never the chained ledgers or episodes) |
 | `CORTEX_V5_ENABLED` + `KI_V5_CHANGE_LEDGER`, `KI_V5_CHANGE_FIRST_RCA`, `KI_V5_INVESTIGATION_WRITEBACK` | rank recent changes first in an investigation, and feed evidence back to the graph |
+| `KI_V5_FILE_PLANE`, `KI_V5_FILE_PLANE_DIR`, `KI_V5_FILE_PLANE_MAX_BYTES` | with `CORTEX_V5_ENABLED`, regenerate bounded CLUSTER.md and MEMORY.md projections of what the agent knows |
 | `MEMORY_BITEMPORAL_ENABLED`, `MEMORY_KG_PPR`, `MEMORY_WRITE_RECONCILE` | graph event time, blast radius ranking, write reconciliation |
 
 With no keys configured every caller is `admin`, which is meant for local use.
