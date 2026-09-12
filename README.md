@@ -54,6 +54,19 @@ kube-sre detector promote NAME     # a human decision; refused if the detector c
 
 They use `--server` / `KUBESRE_URL` (default `http://localhost:8000`) and `--key` / `KUBESRE_API_KEY`.
 
+Operating the hash chains and backups (these talk to the database directly):
+
+```
+kube-sre chain-export memory_audit CLUSTER_ID -o audit.json   # a self-verifying archive
+kube-sre chain-verify audit.json                              # needs no database
+kube-sre chain-truncate audit.json --note "quarterly"         # removes exactly those rows, after declaring the gap
+kube-sre backup-manifest -o manifest.json                     # take beside your pg_dump
+kube-sre backup-verify manifest.json                          # after a restore: did everything come back?
+```
+
+Retention never prunes the chains. A restore that drops the newest rows of a chain breaks no
+link, so only the manifest, which records how far each chain got, can tell.
+
 Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`.
 
 | Setting | Meaning |

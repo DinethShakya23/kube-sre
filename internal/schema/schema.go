@@ -11,6 +11,13 @@
 package schema
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
 	"github.com/DinethShakya23/kube-sre/internal/detectstore"
@@ -44,4 +51,28 @@ func Latest() int {
 		}
 	}
 	return max
+}
+
+// Fingerprint is a SHA-256 over every shipped migration's DDL, in version order, with
+// comments and blank lines removed so a reworded comment is not reported as drift.
+func Fingerprint() string {
+	ms := All()
+	sort.Slice(ms, func(i, j int) bool { return ms[i].Version < ms[j].Version })
+	h := sha256.New()
+	for _, m := range ms {
+		fmt.Fprintf(h, "%d:%s\n", m.Version, ddlOnly(m.SQL))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+var commentRe = regexp.MustCompile(`--[^\n]*`)
+
+func ddlOnly(sql string) string {
+	var out []string
+	for _, ln := range strings.Split(commentRe.ReplaceAllString(sql, ""), "\n") {
+		if ln = strings.TrimSpace(ln); ln != "" {
+			out = append(out, ln)
+		}
+	}
+	return strings.Join(out, "\n")
 }

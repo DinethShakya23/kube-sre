@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/config"
+	"github.com/DinethShakya23/kube-sre/internal/recorder"
 	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
 )
 
 func guardStore(t *testing.T) (*Store, *Guard) {
 	t.Helper()
-	db := storetest.New(t, StoreMigrations, EpisodeMigrations, KGMigrations, GuardMigrations)
+	db := storetest.New(t, StoreMigrations, EpisodeMigrations, KGMigrations, GuardMigrations, recorder.Migrations)
 	s := NewStore(db, config.Load(func(string) string { return "" }))
 	g := NewGuard(db, 3, 0.35)
 	s.Guard = g
@@ -151,8 +152,8 @@ func TestDeclaredTruncationExplainsAMissingFront(t *testing.T) {
 	if v := g.Verify(ctx, "c1"); v.Valid || !v.Verified {
 		t.Fatalf("undeclared front removal is tampering: %+v", v)
 	}
-	_, err := s.DB.Exec(s.DB.Q(`INSERT INTO chain_truncation (chain, scope_id, through_seq, resume_seq, resume_prev_hash, archive_hash, truncated_at)
-		VALUES ('memory_audit', 'c1', 1, 2, ?, 'a', 0)`), prev)
+	_, err := s.DB.Exec(s.DB.Q(`INSERT INTO chain_truncation (chain, scope_id, through_seq, resume_seq, resume_prev_hash, archive_hash)
+		VALUES ('memory_audit', 'c1', 1, 2, ?, 'a')`), prev)
 	if err != nil {
 		t.Fatal(err)
 	}

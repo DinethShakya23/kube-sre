@@ -26,6 +26,8 @@ usage:
   kube-sre digest [--hours N] [flags]    what happened while you were away
   kube-sre postmortem ID [flags]         grounded postmortem of an episode
   kube-sre detector list|new|promote|demote|shadow   manage authored detectors
+  kube-sre chain-export|chain-verify|chain-truncate      archive, check and (deliberately) shorten a hash chain
+  kube-sre backup-manifest|backup-verify                 prove a restore brought everything back
   kube-sre version                       print the version
 
 client flags: --server URL (default $KUBESRE_URL or http://localhost:8000),
@@ -63,6 +65,16 @@ func run(args []string) int {
 		return postmortemCmd(args[1:])
 	case "detector":
 		return detectorCmd(args[1:])
+	case "chain-export":
+		return chainExport(args[1:])
+	case "chain-verify":
+		return chainVerify(args[1:])
+	case "chain-truncate":
+		return chainTruncate(args[1:])
+	case "backup-manifest":
+		return backupManifest(args[1:])
+	case "backup-verify":
+		return backupVerify(args[1:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return 0

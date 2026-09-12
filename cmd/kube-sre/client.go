@@ -79,11 +79,12 @@ func status(args []string) int {
 
 func replay(args []string) int {
 	fs, server, key, user := clientFlags("replay")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
+	pos, perr := parseMixed(fs, args)
+	if perr != nil || len(pos) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: kube-sre replay [flags] EPISODE_ID")
 		return 2
 	}
-	code, err := client.New(*server, *key, *user).Replay(context.Background(), fs.Arg(0), os.Stdout)
+	code, err := client.New(*server, *key, *user).Replay(context.Background(), pos[0], os.Stdout)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		if code == 0 {
@@ -116,11 +117,12 @@ func digestCmd(args []string) int {
 
 func postmortemCmd(args []string) int {
 	fs, server, key, user := clientFlags("postmortem")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
+	pos, perr := parseMixed(fs, args)
+	if perr != nil || len(pos) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: kube-sre postmortem [flags] EPISODE_ID")
 		return 2
 	}
-	md, code, err := client.New(*server, *key, *user).Postmortem(context.Background(), fs.Arg(0))
+	md, code, err := client.New(*server, *key, *user).Postmortem(context.Background(), pos[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
@@ -139,7 +141,8 @@ func detectorCmd(args []string) int {
 		return 2
 	}
 	sub := args[0]
-	if err := fs.Parse(args[1:]); err != nil {
+	posArgs, perr := parseMixed(fs, args[1:])
+	if perr != nil {
 		return 2
 	}
 	c := client.New(*server, *key, *user)
@@ -152,20 +155,20 @@ func detectorCmd(args []string) int {
 			path += "?status=" + *status
 		}
 	case "new":
-		if fs.NArg() < 1 {
+		if len(posArgs) < 1 {
 			fmt.Fprintln(os.Stderr, "usage: kube-sre detector new [--name N] \"description of the failure\"")
 			return 2
 		}
 		method, path = "POST", "/v1/detectors"
-		body, _ = json.Marshal(map[string]string{"description": strings.Join(fs.Args(), " "), "name": *name})
+		body, _ = json.Marshal(map[string]string{"description": strings.Join(posArgs, " "), "name": *name})
 	case "promote", "demote", "shadow":
-		if fs.NArg() != 1 {
+		if len(posArgs) != 1 {
 			fmt.Fprintf(os.Stderr, "usage: kube-sre detector %s NAME\n", sub)
 			return 2
 		}
-		method, path = "POST", "/v1/detectors/"+fs.Arg(0)+"/"+sub
+		method, path = "POST", "/v1/detectors/"+posArgs[0]+"/"+sub
 		if sub == "shadow" {
-			method, path = "GET", "/v1/detectors/"+fs.Arg(0)+"/shadow-findings"
+			method, path = "GET", "/v1/detectors/"+posArgs[0]+"/shadow-findings"
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown detector command %q\n", sub)

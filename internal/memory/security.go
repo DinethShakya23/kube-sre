@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -163,17 +164,6 @@ CREATE TABLE IF NOT EXISTS memory_chain_head (
     seq        BIGINT NOT NULL,
     hash       TEXT NOT NULL,
     updated_at DOUBLE PRECISION NOT NULL
-);
-CREATE TABLE IF NOT EXISTS chain_truncation (
-    chain            TEXT NOT NULL,
-    scope_id         TEXT NOT NULL,
-    through_seq      BIGINT NOT NULL,
-    resume_seq       BIGINT NOT NULL,
-    resume_prev_hash TEXT NOT NULL,
-    archive_hash     TEXT NOT NULL,
-    note             TEXT NOT NULL DEFAULT '',
-    truncated_at     DOUBLE PRECISION NOT NULL,
-    PRIMARY KEY (chain, scope_id, through_seq)
 );`,
 }}
 
@@ -276,7 +266,7 @@ func (g *Guard) Verify(ctx context.Context, clusterID string) recorder.Verdict {
 			return recorder.Verdict{Valid: true, Verified: false}
 		}
 		r.EpisodeID = clusterID
-		r.Payload = parseAttrs(raw)
+		r.Payload = decodeExact(raw)
 		chain = append(chain, r)
 	}
 	rows.Close()
@@ -416,4 +406,14 @@ func (s *Store) forgetEntity(ctx context.Context, counts map[string]int, cluster
 	n, _ := res.RowsAffected()
 	counts["kg_entities"] = int(n)
 	return nil
+}
+
+// decodeExact reads a payload keeping numbers exact, so a verifier hashes the same
+// bytes that were hashed when the row was written.
+func decodeExact(raw []byte) map[string]any {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	out := map[string]any{}
+	_ = dec.Decode(&out)
+	return out
 }
