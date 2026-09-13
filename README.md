@@ -91,6 +91,8 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `MEMORY_PROSPECTIVE`, `MEMORY_RETENTION_DAYS` | post-fix re-checks that actually re-read the cluster; and pruning of telemetry (never the chained ledgers or episodes) |
 | `CORTEX_V5_ENABLED` + `KI_V5_CHANGE_LEDGER`, `KI_V5_CHANGE_FIRST_RCA`, `KI_V5_INVESTIGATION_WRITEBACK` | rank recent changes first in an investigation, and feed evidence back to the graph |
 | `KI_V5_FILE_PLANE`, `KI_V5_FILE_PLANE_DIR`, `KI_V5_FILE_PLANE_MAX_BYTES` | with `CORTEX_V5_ENABLED`, regenerate bounded CLUSTER.md and MEMORY.md projections of what the agent knows |
+| `CORTEX_V5_ENABLED` + `KI_V5_RUNBOOK_SKILLS`, `KI_V5_HARNESS_FANOUT`, `KI_V5_VERIFY_LADDER`, `KI_V5_ESCALATION_BRIEFS`, `KI_V5_RESPONSIVENESS` | matched runbooks as skills; read-only investigators over the ACI verbs; an adversarial review note; a responder brief with explicit escalation conditions; progress heartbeats and latency budgets |
+| `KI_V5_CHANGE_WATCHDOG`, `KI_V5_PREDICTIVE_FUSION`, `KI_V5_PREDICTIVE_PRECAPTURE` | a read-only look at what a change did, at a predicted failure, and recorders armed before a predicted death |
 | `MEMORY_BITEMPORAL_ENABLED`, `MEMORY_KG_PPR`, `MEMORY_WRITE_RECONCILE` | graph event time, blast radius ranking, write reconciliation |
 
 With no keys configured every caller is `admin`, which is meant for local use.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/DinethShakya23/kube-sre/internal/aci"
 	"github.com/DinethShakya23/kube-sre/internal/change"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/events"
@@ -77,7 +78,9 @@ type Deps struct {
 	Memory      Memory
 	// Changes is the change ledger; Writeback feeds an investigation's evidence back
 	// to the graph. Both are optional and gated by v5 flags.
-	Changes   *change.Ledger
+	Changes *change.Ledger
+	// ACI runs the read only investigation verbs for the harness fan out.
+	ACI       *aci.Verbs
 	Writeback func(ctx context.Context, cluster string, playbooks []string)
 	// ClusterID resolves the cluster identity; it is called once per turn.
 	ClusterID func(context.Context) string

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DinethShakya23/kube-sre/internal/aci"
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/api"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
@@ -176,11 +177,14 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		}})
 	}
 	ledger := change.NewLedger()
+	limits := aci.Limits{MaxLines: cfg.V5ACIMaxLines, MaxChars: cfg.V5ACIMaxChars}
+	verbs := aci.Verbs{Run: aciRunner(tools.Kubectl), Limits: limits}
 	a.Agent = agent.New(agent.Deps{
 		Cfg: cfg, Tools: tools, Coordinator: coord, Subagent: sub, Emitter: a.Emitter,
 		Checkpoints: &agent.DBCheckpoints{DB: db},
 		Snapshot:    snap,
 		Changes:     ledger,
+		ACI:         &verbs,
 		Writeback: func(ctx context.Context, cluster string, playbooks []string) {
 			a.Memory.ApplyWriteback(ctx, cluster, memory.SignalsFromInvestigation(cluster, playbooks))
 		},
@@ -197,7 +201,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Watchtower.Prepare = a.Emitter.Prepare
 	a.Watchtower.AfterFix = func(f detect.Finding) { scheduleRecheck(a.Memory, cfg, resolver.Resolve, f) }
 	a.Watchtower.Investigate = a.Agent.Run
-	a.Perception.OnFinding = a.Watchtower.OnFinding
+	a.wireCortex(sub, verbs, resolver.Resolve, ledger)
 	a.Server = api.NewServer(cfg, a.Agent, a.Emitter, Version)
 	a.Server.Perception = a.Perception
 	a.Server.Health["sensorium"] = a.Perception.Status

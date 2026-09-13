@@ -13,6 +13,7 @@
 package agent
 
 import (
+	"github.com/DinethShakya23/kube-sre/internal/cortex"
 	"github.com/DinethShakya23/kube-sre/internal/kube"
 	"github.com/DinethShakya23/kube-sre/internal/llm"
 )
@@ -71,6 +72,8 @@ type State struct {
 
 	// Loaded before the coordinator runs, and pinned into its system prompt.
 	MemoryContext string `json:"memory_context"`
+	// budget is the turn's latency tracker, when responsiveness is on. Not persisted.
+	budget *cortex.PhaseBudget
 	// Pre fetched live pod state and warning events, so the coordinator can answer
 	// without extra tool calls.
 	ClusterSnapshot string `json:"cluster_snapshot"`

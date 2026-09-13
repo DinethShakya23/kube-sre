@@ -92,6 +92,11 @@ func (a *Agent) fanOut(ctx context.Context, st *State) {
 			break
 		}
 	}
+	stopBeat := a.heartbeat(ctx, st.SessionID, "investigating", "Investigation still running…")
+	defer stopBeat()
+	if a.harnessFanout(ctx, st, query) {
+		return
+	}
 	slog.Info("fanning out to specialist subagents", "count", len(rcaDomains), "session", st.SessionID)
 	findings := make([]Finding, len(rcaDomains))
 	var wg sync.WaitGroup

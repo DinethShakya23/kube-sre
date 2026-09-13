@@ -46,6 +46,7 @@ func (a *Agent) loadMemory(ctx context.Context, st *State) {
 	sid := st.SessionID
 	a.emit(sid, events.NewStatus(sid, "loading", "Loading conversation context…"))
 	st.ClusterID = a.ClusterID(ctx)
+	st.budget = a.newBudget()
 	st.MemoryContext = a.Memory.Load(ctx, LoadRequest{
 		UserID: st.UserID, SessionID: sid, ClusterID: st.ClusterID, Query: lastUserText(st),
 	})

@@ -70,6 +70,9 @@ func (a *Agent) systemPrompt(st *State, bypass bool, historySummary string) stri
 			parts = append(parts, b)
 		}
 	}
+	if b := a.skillsBlock(st); b != "" {
+		parts = append(parts, "\n\n"+b)
+	}
 	if a.Cfg.CortexV5 && a.Cfg.ChangeFirstRCA && a.Changes != nil {
 		if prior := change.RenderPrior(a.Changes.Recent(st.ClusterID, ""), 5, 0); prior != "" {
 			parts = append(parts, "\n\n"+prior)
@@ -327,6 +330,8 @@ func (a *Agent) synthesize(ctx context.Context, st *State) error {
 		xml = append(xml, fmt.Sprintf("<finding domain='%s' confidence='%v'>\n  hypothesis: %s\n  signals: %s\n  evidence: %s\n</finding>",
 			f.Domain, f.Confidence, f.Hypothesis, strings.Join(f.Signals, ", "), strings.Join(ev, "\n")))
 	}
+	stopBeat := a.heartbeat(ctx, st.SessionID, "synthesizing", "Still synthesizing the root cause…")
+	defer stopBeat()
 	resp, err := a.Coordinator.Chat(ctx, []llm.Message{
 		{Role: llm.System, Content: coordinatorSystem},
 		{Role: llm.User, Content: synthesisPrompt(strings.Join(xml, "\n"))},
@@ -348,6 +353,7 @@ func (a *Agent) synthesize(ctx context.Context, st *State) error {
 	}
 	summary := fmt.Sprintf("**Root Cause**: %s\n\n**Confidence**: %.0f%%\n\n**Recommended Fix**: %s\n\n**Reasoning**: %s",
 		rca.RootCause, rca.Confidence*100, rca.RecommendedFix, rca.Reasoning)
+	summary = a.afterSynthesis(ctx, st, rca, summary, st.budget)
 	a.emit(st.SessionID, events.NewToken(st.SessionID, summary))
 
 	// Reflexion: persist confident outcomes so future sessions benefit. A failure to
