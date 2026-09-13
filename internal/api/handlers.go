@@ -22,6 +22,12 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 	for name, f := range s.Health {
 		resp[name] = f()
 	}
+	// Runtime identity: which slices this process was configured with.
+	mem, _ := resp["memory"].(map[string]any)
+	state, _ := mem["state"].(string)
+	resp["experimental_flags"] = s.Cfg.ActiveFlags()
+	resp["set_but_unwired_flags"] = s.Cfg.SetButUnwired()
+	resp["degraded_experimental_flags"] = s.Cfg.DegradedFlags(state)
 	if _, ok := resp["leader"]; !ok {
 		resp["leader"] = map[string]any{"enabled": false, "is_leader": true, "reason": "no election - single process"}
 	}

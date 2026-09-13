@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DinethShakya23/kube-sre/internal/audit"
+	"github.com/DinethShakya23/kube-sre/internal/autonomy"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/fleet"
 	"github.com/DinethShakya23/kube-sre/internal/store/storetest"
@@ -14,7 +15,7 @@ import (
 
 func prospStore(t *testing.T, env map[string]string) *Store {
 	t.Helper()
-	db := storetest.New(t, StoreMigrations, EpisodeMigrations, KGMigrations, ProspectiveMigrations, audit.Migrations, fleet.Migrations)
+	db := storetest.New(t, StoreMigrations, EpisodeMigrations, KGMigrations, ProspectiveMigrations, audit.Migrations, fleet.Migrations, autonomy.PromotionMigrations)
 	s := NewStore(db, config.Load(func(k string) string { return env[k] }))
 	s.Now = func() time.Time { return t0 }
 	return s

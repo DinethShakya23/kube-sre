@@ -52,6 +52,8 @@ type App struct {
 	Memory     *memory.Store
 	// Consolidator runs the memory housekeeping passes.
 	Consolidator *memory.Consolidator
+	Budget       *autonomy.Budget
+	Outcomes     *autonomy.Outcomes
 	Service      *memory.Service
 	election     *store.Election
 	mu           sync.Mutex
@@ -208,6 +210,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	report := digest.Builder{DB: db, Cfg: cfg, Perception: a.Perception.State}
 	a.Server.Digest = &report
 	a.Server.Postmortem = &digest.PostmortemBuilder{Builder: report, Recorder: a.Recorder, Narrator: sub}
+	a.wireTrust()
 	a.Server.Health["audit"] = a.Audit.Status
 	a.Server.Health["recorder"] = a.Recorder.Status
 	a.Server.Health["memory"] = a.Service.Status

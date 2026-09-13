@@ -103,45 +103,99 @@ type Config struct {
 	AutonomyA3Allowlist string // "CrashLoopBackOff/dev-*"
 
 	// Memory
-	MemoryHybrid        bool
-	MemoryBitemporal    bool
-	MemoryKGPPR         bool
-	MemoryReconcile     bool
-	MemorySecurity      bool
-	FilePlane           bool
-	FilePlaneDir        string
-	FilePlaneMaxBytes   int
-	OtelSpans           bool
-	LeaderElection      bool
-	LeaderPollSeconds   int
-	MemoryHierarchy     bool
-	MemoryObsQueue      int
-	MemoryChainVerifyS  int
-	CortexV5            bool
-	ChangeFirstRCA      bool
-	ChangeLedger        bool
-	Writeback           bool
-	MemoryPromotion     bool
-	MemorySummaryTree   bool
-	MemorySummaryMin    int
-	MemoryProspective   bool
-	MemoryRetentionDays int
-	PostmortemEnabled   bool
-	PostmortemNarrative bool
-	MemoryWriteRate     int
-	MemoryTrustFloor    float64
-	MemoryImportance    bool
-	MemorySimFloor      float64
-	PreferenceMemory    bool
-	PreferenceDecayDays int
-	PreferenceMinConf   float64
-	PreferenceMinOccur  int
-	RequireAuth         bool
-	AuthBackend         string // static | hmac
-	DemoKeySecret       string
-	DemoKeyDefaultTTL   int // hours
-	DemoKeyMaxTTL       int // hours
-	MetricsEnabled      bool
+	MemoryHybrid              bool
+	MemoryBitemporal          bool
+	MemoryKGPPR               bool
+	MemoryReconcile           bool
+	MemorySecurity            bool
+	V5ACIReadVerbs            bool
+	V5ACIMaxLines             int
+	V5ACIMaxChars             int
+	V5ACIMutatingVerbs        bool
+	V5HarnessFanout           bool
+	V5HarnessMaxSubagents     int
+	V5HarnessMaxRounds        int
+	V5HarnessLargeModel       bool
+	V5VerifyLadder            bool
+	V5Responsiveness          bool
+	V5HeartbeatSeconds        float64
+	V5FirstSignalBudgetS      float64
+	V5FullBudgetS             float64
+	V5EscalationBriefs        bool
+	V5ResponderLevel          string
+	V5RunbookSkills           bool
+	V5BlastRadiusBudget       bool
+	V5KillSwitch              bool
+	V5ChangeFreeze            bool
+	V5SpendCapUSD             float64
+	V5SpendInPer1K            float64
+	V5SpendOutPer1K           float64
+	V5StagedPropagation       bool
+	V5StageSize               int
+	V5StageWindowSeconds      float64
+	V5FailureDomainBudget     bool
+	V5MaxUnavailablePerZone   float64
+	V5StatisticalPromotion    bool
+	V5OfflineShadowWeight     float64
+	V5ModelRouting            bool
+	V5AirgapFloor             bool
+	V5ChangeWatchdog          bool
+	V5WatchdogTTLSeconds      int
+	V5WatchdogMaxActive       int
+	V5Rightsizing             bool
+	V5PredictiveFusion        bool
+	V5NLDetectorLadder        bool
+	V5DetectorMinFirings      int
+	V5DetectorPrecisionTheta  float64
+	V5AgenticWorkloadDetector bool
+	V5GPUHealthDetector       bool
+	V5AgentToolRateCap        float64
+	V5AgentCostRateCap        float64
+	V5PredictivePrecapture    bool
+	V5PrecaptureETAMin        float64
+	V5FleetExchange           bool
+	V5FleetSignalPooling      bool
+	V5FleetPatternMinClusters int
+	V5CapabilitySandbox       bool
+	V5SandboxSANamespace      string
+	V5SandboxReadonlySA       string
+	V5SandboxWriterSA         string
+	FilePlane                 bool
+	FilePlaneDir              string
+	FilePlaneMaxBytes         int
+	OtelSpans                 bool
+	LeaderElection            bool
+	LeaderPollSeconds         int
+	MemoryHierarchy           bool
+	MemoryObsQueue            int
+	MemoryChainVerifyS        int
+	CortexV5                  bool
+	ChangeFirstRCA            bool
+	ChangeLedger              bool
+	Writeback                 bool
+	MemoryPromotion           bool
+	MemorySummaryTree         bool
+	MemorySummaryMin          int
+	MemoryProspective         bool
+	MemoryRetentionDays       int
+	PostmortemEnabled         bool
+	PostmortemNarrative       bool
+	MemoryWriteRate           int
+	MemoryTrustFloor          float64
+	MemoryImportance          bool
+	MemorySimFloor            float64
+	PreferenceMemory          bool
+	PreferenceDecayDays       int
+	PreferenceMinConf         float64
+	PreferenceMinOccur        int
+	RequireAuth               bool
+	AuthBackend               string // static | hmac
+	DemoKeySecret             string
+	DemoKeyDefaultTTL         int // hours
+	DemoKeyMaxTTL             int // hours
+	MetricsEnabled            bool
+	// Flags lists every experimental setting as loaded, with its default.
+	Flags []Flag
 
 	RateLimit           bool
 	RateLimitPerMin     int
@@ -155,13 +209,20 @@ var alwaysBlocked = []string{"secret", "secrets", "serviceaccount", "serviceacco
 var label = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 func Load(getenv func(string) string) *Config {
-	str := func(k, def string) string {
+	var flags []Flag
+	track := func(k string, isBool bool, def, v any) {
+		if isExperimental(k) {
+			flags = append(flags, Flag{Env: k, Bool: isBool, Default: def, Value: v})
+		}
+	}
+	str0 := func(k, def string) string {
 		if v := strings.TrimSpace(getenv(k)); v != "" {
 			return v
 		}
 		return def
 	}
-	boolean := func(k string, def bool) bool {
+	str := func(k, def string) string { v := str0(k, def); track(k, false, def, v); return v }
+	boolean0 := func(k string, def bool) bool {
 		switch strings.ToLower(strings.TrimSpace(getenv(k))) {
 		case "1", "true", "yes", "on":
 			return true
@@ -170,10 +231,11 @@ func Load(getenv func(string) string) *Config {
 		}
 		return def
 	}
+	boolean := func(k string, def bool) bool { v := boolean0(k, def); track(k, true, def, v); return v }
 	var problems []string
 	// numMin reads an integer that must be at least min. A value that is not a
 	// number, or is below min, is reported and the default is used.
-	numMin := func(k string, def, min int) int {
+	numMin0 := func(k string, def, min int) int {
 		raw := strings.TrimSpace(getenv(k))
 		if raw == "" {
 			return def
@@ -189,9 +251,10 @@ func Load(getenv func(string) string) *Config {
 		}
 		return n
 	}
+	numMin := func(k string, def, min int) int { v := numMin0(k, def, min); track(k, false, def, v); return v }
 	num := func(k string, def int) int { return numMin(k, def, 1) }
 	anyInt := func(k string, def int) int { return numMin(k, def, math.MinInt) }
-	float := func(k string, def float64) float64 {
+	float0 := func(k string, def float64) float64 {
 		raw := strings.TrimSpace(getenv(k))
 		if raw == "" {
 			return def
@@ -203,6 +266,7 @@ func Load(getenv func(string) string) *Config {
 		}
 		return f
 	}
+	float := func(k string, def float64) float64 { v := float0(k, def); track(k, false, def, v); return v }
 
 	home, _ := os.UserHomeDir()
 	c := &Config{
@@ -281,32 +345,84 @@ func Load(getenv func(string) string) *Config {
 		AutonomyNsLevels:    str("AUTONOMY_NAMESPACE_LEVELS", ""),
 		AutonomyA3Allowlist: str("AUTONOMY_A3_ALLOWLIST", ""),
 
-		MemoryBitemporal:    boolean("MEMORY_BITEMPORAL_ENABLED", false),
-		MemoryKGPPR:         boolean("MEMORY_KG_PPR", false),
-		MemoryReconcile:     boolean("MEMORY_WRITE_RECONCILE", false),
-		MemorySecurity:      boolean("MEMORY_SECURITY_HARDENING", false),
-		FilePlane:           boolean("KI_V5_FILE_PLANE", false),
-		FilePlaneDir:        str("KI_V5_FILE_PLANE_DIR", "ki-memory"),
-		FilePlaneMaxBytes:   num("KI_V5_FILE_PLANE_MAX_BYTES", 25000),
-		OtelSpans:           boolean("KI_V5_OTEL_SPANS_ENABLED", false),
-		LeaderElection:      boolean("LEADER_ELECTION_ENABLED", true),
-		LeaderPollSeconds:   num("LEADER_ELECTION_POLL_SECONDS", 10),
-		MemoryHierarchy:     boolean("MEMORY_HIERARCHY_ENABLED", true),
-		MemoryObsQueue:      num("MEMORY_OBS_QUEUE_MAXSIZE", 10000),
-		MemoryChainVerifyS:  numMin("MEMORY_CHAIN_VERIFY_INTERVAL_S", 900, 0),
-		CortexV5:            boolean("CORTEX_V5_ENABLED", false),
-		ChangeFirstRCA:      boolean("KI_V5_CHANGE_FIRST_RCA", false),
-		ChangeLedger:        boolean("KI_V5_CHANGE_LEDGER", false),
-		Writeback:           boolean("KI_V5_INVESTIGATION_WRITEBACK", false),
-		MemoryPromotion:     boolean("MEMORY_PROMOTION", false),
-		MemorySummaryTree:   boolean("MEMORY_SUMMARY_TREE", false),
-		MemorySummaryMin:    num("MEMORY_SUMMARY_MIN_CLUSTER", 3),
-		MemoryProspective:   boolean("MEMORY_PROSPECTIVE", false),
-		MemoryRetentionDays: numMin("MEMORY_RETENTION_DAYS", 0, 0),
-		PostmortemEnabled:   boolean("POSTMORTEM_ENABLED", true),
-		PostmortemNarrative: boolean("POSTMORTEM_LLM_NARRATIVE", false),
-		MemoryWriteRate:     num("MEMORY_WRITE_RATE_PER_MIN", 30),
-		MemoryTrustFloor:    float("MEMORY_TRUST_FLOOR", 0.35),
+		MemoryBitemporal:          boolean("MEMORY_BITEMPORAL_ENABLED", false),
+		MemoryKGPPR:               boolean("MEMORY_KG_PPR", false),
+		MemoryReconcile:           boolean("MEMORY_WRITE_RECONCILE", false),
+		MemorySecurity:            boolean("MEMORY_SECURITY_HARDENING", false),
+		V5ACIReadVerbs:            boolean("KI_V5_ACI_READ_VERBS_ENABLED", false),
+		V5ACIMaxLines:             num("KI_V5_ACI_MAX_LINES", 100),
+		V5ACIMaxChars:             num("KI_V5_ACI_MAX_CHARS", 8000),
+		V5ACIMutatingVerbs:        boolean("KI_V5_ACI_MUTATING_VERBS", false),
+		V5HarnessFanout:           boolean("KI_V5_HARNESS_FANOUT", false),
+		V5HarnessMaxSubagents:     num("KI_V5_HARNESS_MAX_SUBAGENTS", 4),
+		V5HarnessMaxRounds:        num("KI_V5_HARNESS_MAX_SUBAGENT_ROUNDS", 3),
+		V5HarnessLargeModel:       boolean("KI_V5_HARNESS_SUBAGENT_LARGE_MODEL", false),
+		V5VerifyLadder:            boolean("KI_V5_VERIFY_LADDER", false),
+		V5Responsiveness:          boolean("KI_V5_RESPONSIVENESS", false),
+		V5HeartbeatSeconds:        float("KI_V5_HEARTBEAT_SECONDS", 10),
+		V5FirstSignalBudgetS:      float("KI_V5_FIRST_SIGNAL_BUDGET_S", 30),
+		V5FullBudgetS:             float("KI_V5_FULL_BUDGET_S", 120),
+		V5EscalationBriefs:        boolean("KI_V5_ESCALATION_BRIEFS", false),
+		V5ResponderLevel:          str("KI_V5_RESPONDER_LEVEL", "intermediate"),
+		V5RunbookSkills:           boolean("KI_V5_RUNBOOK_SKILLS", false),
+		V5BlastRadiusBudget:       boolean("KI_V5_BLAST_RADIUS_BUDGET", false),
+		V5KillSwitch:              boolean("KI_V5_KILL_SWITCH", false),
+		V5ChangeFreeze:            boolean("KI_V5_CHANGE_FREEZE", false),
+		V5SpendCapUSD:             float("KI_V5_SPEND_CAP_USD", 0),
+		V5SpendInPer1K:            float("KI_V5_SPEND_IN_PRICE_PER_1K", 0.0025),
+		V5SpendOutPer1K:           float("KI_V5_SPEND_OUT_PRICE_PER_1K", 0.01),
+		V5StagedPropagation:       boolean("KI_V5_STAGED_PROPAGATION", false),
+		V5StageSize:               num("KI_V5_STAGE_SIZE", 1),
+		V5StageWindowSeconds:      float("KI_V5_STAGE_WINDOW_SECONDS", 300),
+		V5FailureDomainBudget:     boolean("KI_V5_FAILURE_DOMAIN_BUDGET", false),
+		V5MaxUnavailablePerZone:   float("KI_V5_MAX_UNAVAILABLE_PER_ZONE", 0.34),
+		V5StatisticalPromotion:    boolean("KI_V5_STATISTICAL_PROMOTION", false),
+		V5OfflineShadowWeight:     float("KI_V5_OFFLINE_SHADOW_WEIGHT", 0.5),
+		V5ModelRouting:            boolean("KI_V5_MODEL_ROUTING", false),
+		V5AirgapFloor:             boolean("KI_V5_AIRGAP_FLOOR", false),
+		V5ChangeWatchdog:          boolean("KI_V5_CHANGE_WATCHDOG", false),
+		V5WatchdogTTLSeconds:      num("KI_V5_WATCHDOG_TTL_SECONDS", 300),
+		V5WatchdogMaxActive:       num("KI_V5_WATCHDOG_MAX_ACTIVE", 5),
+		V5Rightsizing:             boolean("KI_V5_RIGHTSIZING", false),
+		V5PredictiveFusion:        boolean("KI_V5_PREDICTIVE_FUSION", false),
+		V5NLDetectorLadder:        boolean("KI_V5_NL_DETECTOR_LADDER", false),
+		V5DetectorMinFirings:      num("KI_V5_DETECTOR_MIN_FIRINGS", 20),
+		V5DetectorPrecisionTheta:  float("KI_V5_DETECTOR_PRECISION_THETA", 0.90),
+		V5AgenticWorkloadDetector: boolean("KI_V5_AGENTIC_WORKLOAD_DETECTOR", false),
+		V5GPUHealthDetector:       boolean("KI_V5_GPU_HEALTH_DETECTOR", false),
+		V5AgentToolRateCap:        float("KI_V5_AGENT_TOOL_RATE_CAP", 60),
+		V5AgentCostRateCap:        float("KI_V5_AGENT_COST_RATE_CAP", 1.0),
+		V5PredictivePrecapture:    boolean("KI_V5_PREDICTIVE_PRECAPTURE", false),
+		V5PrecaptureETAMin:        float("KI_V5_PRECAPTURE_ETA_MIN", 15),
+		V5FleetExchange:           boolean("KI_V5_FLEET_EXCHANGE", false),
+		V5FleetSignalPooling:      boolean("KI_V5_FLEET_SIGNAL_POOLING", false),
+		V5FleetPatternMinClusters: num("KI_V5_FLEET_PATTERN_MIN_CLUSTERS", 3),
+		V5CapabilitySandbox:       boolean("KI_V5_CAPABILITY_SANDBOX", false),
+		V5SandboxSANamespace:      str("KI_V5_SANDBOX_SA_NAMESPACE", "kube-sre"),
+		V5SandboxReadonlySA:       str("KI_V5_SANDBOX_READONLY_SA", "ki-readonly"),
+		V5SandboxWriterSA:         str("KI_V5_SANDBOX_WRITER_SA", "ki-writer"),
+		FilePlane:                 boolean("KI_V5_FILE_PLANE", false),
+		FilePlaneDir:              str("KI_V5_FILE_PLANE_DIR", "ki-memory"),
+		FilePlaneMaxBytes:         num("KI_V5_FILE_PLANE_MAX_BYTES", 25000),
+		OtelSpans:                 boolean("KI_V5_OTEL_SPANS_ENABLED", false),
+		LeaderElection:            boolean("LEADER_ELECTION_ENABLED", true),
+		LeaderPollSeconds:         num("LEADER_ELECTION_POLL_SECONDS", 10),
+		MemoryHierarchy:           boolean("MEMORY_HIERARCHY_ENABLED", true),
+		MemoryObsQueue:            num("MEMORY_OBS_QUEUE_MAXSIZE", 10000),
+		MemoryChainVerifyS:        numMin("MEMORY_CHAIN_VERIFY_INTERVAL_S", 900, 0),
+		CortexV5:                  boolean("CORTEX_V5_ENABLED", false),
+		ChangeFirstRCA:            boolean("KI_V5_CHANGE_FIRST_RCA", false),
+		ChangeLedger:              boolean("KI_V5_CHANGE_LEDGER", false),
+		Writeback:                 boolean("KI_V5_INVESTIGATION_WRITEBACK", false),
+		MemoryPromotion:           boolean("MEMORY_PROMOTION", false),
+		MemorySummaryTree:         boolean("MEMORY_SUMMARY_TREE", false),
+		MemorySummaryMin:          num("MEMORY_SUMMARY_MIN_CLUSTER", 3),
+		MemoryProspective:         boolean("MEMORY_PROSPECTIVE", false),
+		MemoryRetentionDays:       numMin("MEMORY_RETENTION_DAYS", 0, 0),
+		PostmortemEnabled:         boolean("POSTMORTEM_ENABLED", true),
+		PostmortemNarrative:       boolean("POSTMORTEM_LLM_NARRATIVE", false),
+		MemoryWriteRate:           num("MEMORY_WRITE_RATE_PER_MIN", 30),
+		MemoryTrustFloor:          float("MEMORY_TRUST_FLOOR", 0.35),
 
 		MemoryHybrid:     boolean("MEMORY_HYBRID_RETRIEVAL", false),
 		MemoryImportance: boolean("MEMORY_IMPORTANCE", false),
@@ -357,6 +473,7 @@ func Load(getenv func(string) string) *Config {
 		}
 	}
 	c.Problems = problems
+	c.Flags = flags
 	return c
 }
 

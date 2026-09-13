@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/DinethShakya23/kube-sre/internal/autonomy"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/digest"
 	"github.com/DinethShakya23/kube-sre/internal/memory"
@@ -159,5 +161,39 @@ func TestPostmortemDisabled(t *testing.T) {
 	r, _ := memRig(t, map[string]string{"POSTMORTEM_ENABLED": "false"})
 	if resp, _ := r.do(t, "GET", "/v1/episodes/x/postmortem", "", nil); resp.StatusCode != 404 {
 		t.Errorf("%d", resp.StatusCode)
+	}
+}
+
+func TestV5StatusReportsTheBrakesAndWhatIsReallyActive(t *testing.T) {
+	r, _ := memRig(t, map[string]string{"KI_V5_KILL_SWITCH": "true", "KI_V5_STATISTICAL_PROMOTION": "true", "CORTEX_V5_ENABLED": "true", "KI_V5_SPEND_CAP_USD": "5", "KUBESRE_ADMIN_KEYS": "adm"})
+	r.srv.Budget = autonomy.NewBudget(r.srv.Cfg)
+	r.srv.Outcomes = &autonomy.Outcomes{DB: r.srv.Memory.DB}
+	_, _ = r.srv.Memory.DB.Exec(`CREATE TABLE IF NOT EXISTS promotion_outcomes (id INTEGER PRIMARY KEY AUTOINCREMENT, action_class TEXT, ts_days REAL, success BOOLEAN, incident_id TEXT, incident_type TEXT, critical BOOLEAN, created_at REAL)`)
+
+	resp, body := r.do(t, "GET", "/v1/v5/status", "", bearer("adm"))
+	var st map[string]any
+	_ = json.Unmarshal([]byte(body), &st)
+	if resp.StatusCode != 200 || st["kill_switch_engaged"] != true || st["cortex_v5_enabled"] != true || st["spend_cap_usd"] != float64(5) {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	ap := st["autonomy_promotion"].(map[string]any)
+	if ap["direction"] != "revoke-only" || ap["operating"] != true || ap["authority_revoked"] != false {
+		t.Errorf("%v", ap)
+	}
+	if !strings.Contains(body, "CORTEX_V5_ENABLED") || !strings.Contains(body, `"active_flags"`) || !strings.Contains(body, `"set_but_unwired_flags"`) {
+		t.Errorf("%s", body)
+	}
+
+	// An unreadable store is reported as not operating, never as a clean record.
+	_, _ = r.srv.Memory.DB.Exec(`DROP TABLE promotion_outcomes`)
+	_, body = r.do(t, "GET", "/v1/v5/status", "", bearer("adm"))
+	if !strings.Contains(body, `"operating":false`) || !strings.Contains(body, "outcome store unreadable") {
+		t.Errorf("%s", body)
+	}
+
+	off, _ := memRig(t, nil)
+	_, body = off.do(t, "GET", "/v1/v5/status", "", nil)
+	if !strings.Contains(body, `"reason":"flag off"`) || !strings.Contains(body, `"kill_switch_engaged":false`) {
+		t.Errorf("%s", body)
 	}
 }

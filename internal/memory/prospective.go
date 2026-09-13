@@ -200,6 +200,9 @@ type RetentionRule struct {
 var RetentionRules = []RetentionRule{
 	{Table: "request_log", TSColumn: "created_at", Why: "API access telemetry; read by nothing after the fact and the fastest growing table."},
 	{Table: "session_notes", TSColumn: "created_at", Epoch: true, Why: "scratch notes; nothing recalls them across sessions."},
+	{Table: "promotion_outcomes", TSColumn: "created_at", Epoch: true, FloorDays: 90,
+		Why:      "statistical samples for the promotion engine; explicitly not an audit ledger, and the engine only ever reads a rolling window.",
+		FloorWhy: "the A3 statistical brake reads a rolling window of 90 days; pruning inside it would delete the failures the brake demotes on, so a short retention setting would quietly widen what the watchtower may do unattended"},
 	{Table: "fleet_signals", TSColumn: "created_at", Epoch: true, Why: "pooled per cluster signals; pooling is a recency question, an old signal is noise and not history."},
 	{Table: "prospective_memory", TSColumn: "created_at", Epoch: true, Where: "status IN ('done', 'cancelled')",
 		Why: "re-checks already graded; the grade lives on in the episode."},

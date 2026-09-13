@@ -67,6 +67,11 @@ kube-sre backup-verify manifest.json                          # after a restore:
 Retention never prunes the chains. A restore that drops the newest rows of a chain breaks no
 link, so only the manifest, which records how far each chain got, can tell.
 
+`GET /v1/v5/status` (and `/healthz`) report which experimental slices are on, which settings you
+changed that no code reads, which are on inside a subsystem that is not running, and the state of the
+write brakes: `KI_V5_KILL_SWITCH`, `KI_V5_CHANGE_FREEZE`, and the statistical revocation of autonomous
+fixes (`KI_V5_STATISTICAL_PROMOTION`, revoke only).
+
 Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`.
 
 | Setting | Meaning |

@@ -12,6 +12,7 @@ import (
 
 	"github.com/DinethShakya23/kube-sre/internal/agent"
 	"github.com/DinethShakya23/kube-sre/internal/audit"
+	"github.com/DinethShakya23/kube-sre/internal/autonomy"
 	"github.com/DinethShakya23/kube-sre/internal/config"
 	"github.com/DinethShakya23/kube-sre/internal/detectstore"
 	"github.com/DinethShakya23/kube-sre/internal/digest"
@@ -39,7 +40,10 @@ type Server struct {
 	// Digest and Postmortem build the recorder backed reports.
 	Digest *digest.Builder
 	// Detectors is the detector queue and Compiler the model that authors from prose.
-	Detectors  *detectstore.Store
+	Detectors *detectstore.Store
+	// Budget and Outcomes are the write authority brakes shown on the v5 status.
+	Budget     *autonomy.Budget
+	Outcomes   *autonomy.Outcomes
 	Compiler   llm.Model
 	Postmortem *digest.PostmortemBuilder
 	// Perception is the sensorium and detector service, when one runs.
@@ -125,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/episodes/{id}/replay", s.authed(s.episodeReplay))
 	mux.HandleFunc("GET /v1/episodes/{id}/postmortem", s.authed(s.postmortemHandler))
 	mux.HandleFunc("GET /v1/digest", s.authed(s.digestHandler))
+	mux.HandleFunc("GET /v1/v5/status", s.authed(s.v5Status))
 	mux.HandleFunc("POST /v1/detectors", s.authed(s.createDetector))
 	mux.HandleFunc("GET /v1/detectors", s.authed(s.listDetectors))
 	mux.HandleFunc("POST /v1/detectors/{name}/promote", s.authed(s.promoteDetector))
