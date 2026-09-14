@@ -60,23 +60,6 @@ func chat(args []string) int {
 	return 0
 }
 
-func status(args []string) int {
-	fs, server, key, user := clientFlags("status")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	text, ok, err := client.New(*server, *key, *user).Status(context.Background())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		return 1
-	}
-	fmt.Print(text)
-	if !ok {
-		return 1
-	}
-	return 0
-}
-
 func replay(args []string) int {
 	fs, server, key, user := clientFlags("replay")
 	pos, perr := parseMixed(fs, args)

@@ -15,13 +15,21 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/schema"
 )
 
+func versionString() string { return app.Version }
+
 const usage = `kube-sre - AI powered Kubernetes operations
 
 usage:
   kube-sre serve [--host H] [--port P]   start the API server
   kube-sre db-init                       create or update the database schema
   kube-sre chat [-q MSG] [flags]         talk to a running server
-  kube-sre status [flags]                show server health
+  kube-sre init                          first time setup: writes ~/.kube-sre/.env
+  kube-sre set KEY=VALUE ...             change a setting (restarts the service if it runs)
+  kube-sre status                        local dashboard; exits non zero if a component failed
+  kube-sre health [flags]                the running server's subsystem blocks
+  kube-sre service install|uninstall|status   run as a systemd user service
+  kube-sre kind-setup                    create a local kind cluster
+  kube-sre provenance [--tag vX.Y.Z]     how to verify a release
   kube-sre replay ID [flags]             replay a recorded episode
   kube-sre digest [--hours N] [flags]    what happened while you were away
   kube-sre postmortem ID [flags]         grounded postmortem of an episode
@@ -56,7 +64,19 @@ func run(args []string) int {
 	case "chat":
 		return chat(args[1:])
 	case "status":
-		return status(args[1:])
+		return statusCmd(args[1:])
+	case "health":
+		return healthCmd(args[1:])
+	case "init":
+		return initCmd(args[1:])
+	case "set":
+		return setCmd(args[1:])
+	case "service":
+		return serviceCmd(args[1:])
+	case "kind-setup":
+		return kindSetupCmd(args[1:])
+	case "provenance":
+		return provenanceCmd(args[1:])
 	case "replay":
 		return replay(args[1:])
 	case "digest":

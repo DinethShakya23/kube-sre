@@ -38,12 +38,17 @@ It uses SQLite at `~/.kube-sre/kube-sre.db` unless Postgres is configured
 (`DATABASE_URL`, or `POSTGRES_HOST` and friends). `kube-sre db-init` creates the schema
 explicitly; `serve` also applies it on start.
 
+First time: `kube-sre init` writes `~/.kube-sre/.env` (and prints an admin key once); `kube-sre set KEY=VALUE`
+changes a setting; `kube-sre status` is a local dashboard that exits non zero when something is broken;
+`kube-sre service install` runs it as a systemd user service; `kube-sre kind-setup` makes a local cluster;
+`kube-sre provenance` says how to verify a release.
+
 Talk to a running server from the terminal:
 
 ```
 kube-sre chat                      # interactive; approvals are asked for on the spot
 kube-sre chat -q "why is web crashing?"
-kube-sre status                    # health of the recorder, sensorium, audit and memory
+kube-sre health                    # the running server's recorder, sensorium, audit, memory and leader blocks
 kube-sre replay EPISODE_ID         # exit 0 intact, 3 broken, 4 could not be verified
 kube-sre digest --hours 12         # findings, autonomous work and rollback points since then
 kube-sre postmortem EPISODE_ID     # timeline citing event numbers, same exit codes as replay
