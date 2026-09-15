@@ -274,8 +274,8 @@
   function loadDigest() {
     var box = $("digestBody");
     box.textContent = "Loading...";
-    getText("/v1/digest?format=markdown&hours=" + encodeURIComponent($("digestHours").value)).then(function (t) {
-      box.innerHTML = md.render(t);
+    getJSON("/v1/digest?format=markdown&hours=" + encodeURIComponent($("digestHours").value)).then(function (j) {
+      box.innerHTML = md.render(j.markdown || "");
     }).catch(function (e) { box.textContent = "Could not load the digest. " + e.message; });
   }
 
@@ -424,7 +424,7 @@
         box.appendChild(it);
       });
     }).catch(function (e) {
-      $("detList").textContent = e.status === 404 || e.status === 403 ? "Detectors are not enabled for this key." : "Could not list detectors. " + e.message;
+      $("detList").textContent = e.status === 404 ? "Detectors are not enabled on this server." : e.status === 403 ? "Detectors need a higher role than this key has." : "Could not list detectors. " + e.message;
     });
 
     getJSON("/v1/preferences").then(function (j) {
