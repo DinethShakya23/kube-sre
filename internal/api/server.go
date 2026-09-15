@@ -23,6 +23,7 @@ import (
 	"github.com/DinethShakya23/kube-sre/internal/nsguard"
 	"github.com/DinethShakya23/kube-sre/internal/perception"
 	"github.com/DinethShakya23/kube-sre/internal/recorder"
+	"github.com/DinethShakya23/kube-sre/internal/web"
 )
 
 // StatusFunc reports the state of one subsystem for /healthz.
@@ -106,6 +107,8 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, role stri
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /{$}", web.Redirect)
+	mux.Handle("GET /ui/", web.Handler())
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	// Liveness and readiness must answer an unauthenticated kubelet, so they are

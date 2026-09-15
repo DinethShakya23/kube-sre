@@ -57,6 +57,12 @@ kube-sre detector shadow NAME      # what a shadow detector fired, and whether i
 kube-sre detector promote NAME     # a human decision; refused if the detector can never fire
 ```
 
+Or open the web UI at `http://HOST:PORT/` (it is inside the binary, no build step). It has chat
+with Approve and Deny buttons, findings, the digest, postmortems with the chain verdict, status,
+and detector and preference management. Paste an API key on first use; the page itself is static
+and every data call still needs the key. On a remote host, tunnel first:
+`ssh -L 8765:127.0.0.1:8765 user@host`.
+
 They use `--server` / `KUBESRE_URL` (default `http://localhost:8000`) and `--key` / `KUBESRE_API_KEY`.
 
 Operating the hash chains and backups (these talk to the database directly):
@@ -103,6 +109,8 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 With no keys configured every caller is `admin`, which is meant for local use.
 
 ## API
+
+The UI is served from `/ui/` and `/` redirects there.
 
 `POST /v1/chat/completions` streams Server Sent Events. Send `X-Session-ID` to keep a
 conversation; when the reply asks for approval, answer `yes` or `no` in the same session.

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kube-sre</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="logo" aria-hidden="true"></span><span>kube-sre</span></div>
+      <nav id="nav" aria-label="Sections">
+        <button data-view="chat" class="on">Chat</button>
+        <button data-view="findings">Findings</button>
+        <button data-view="digest">Digest</button>
+        <button data-view="reports">Postmortems</button>
+        <button data-view="status">Status</button>
+        <button data-view="manage">Manage</button>
+      </nav>
+      <div class="side-foot">
+        <div class="who" id="who"><span class="dot" id="dot"></span><span id="whoText">not connected</span></div>
+        <button class="link" id="keyBtn" type="button">API key</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="banner" id="banner" hidden></div>
+
+      <section id="view-chat" class="view on">
+        <header class="bar">
+          <div>
+            <h1>Chat</h1>
+            <p class="sub">Ask about the cluster. Answers come from live reads. Every write waits for your approval.</p>
+          </div>
+          <div class="bar-actions">
+            <span class="chip" id="sessionChip" title="Session id"></span>
+            <button type="button" id="reportBtn" class="ghost" title="Open this session's postmortem">Postmortem</button>
+            <button type="button" id="newChat" class="ghost">New chat</button>
+          </div>
+        </header>
+        <div class="thread" id="thread" aria-live="polite"></div>
+        <div class="approval" id="approval" hidden>
+          <div class="approval-text" id="approvalText"></div>
+          <div class="approval-actions">
+            <button type="button" class="ok" id="approveBtn">Approve</button>
+            <button type="button" class="danger" id="denyBtn">Deny</button>
+          </div>
+        </div>
+        <form class="composer" id="composer">
+          <textarea id="input" rows="2" placeholder="Why is postgres failing its probes?" aria-label="Message"></textarea>
+          <div class="composer-actions">
+            <button type="button" id="stopBtn" class="ghost" hidden>Stop</button>
+            <button type="submit" id="sendBtn">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="view-findings" class="view">
+        <header class="bar">
+          <div><h1>Findings</h1><p class="sub">Detector firings. They cost no model calls.</p></div>
+          <div class="bar-actions">
+            <label class="check"><input type="checkbox" id="findAuto" checked> auto refresh</label>
+            <button type="button" id="findRefresh" class="ghost">Refresh</button>
+          </div>
+        </header>
+        <div id="findMeta" class="cards"></div>
+        <div class="table-wrap"><table class="table" id="findTable"><thead><tr>
+          <th>When</th><th>Detector</th><th>Severity</th><th>Object</th><th>Evidence</th><th></th>
+        </tr></thead><tbody></tbody></table></div>
+        <p class="empty" id="findEmpty" hidden></p>
+      </section>
+
+      <section id="view-digest" class="view">
+        <header class="bar">
+          <div><h1>Digest</h1><p class="sub">What happened while you were away.</p></div>
+          <div class="bar-actions">
+            <select id="digestHours" aria-label="Window">
+              <option value="6">Last 6 hours</option><option value="12">Last 12 hours</option>
+              <option value="24" selected>Last 24 hours</option><option value="72">Last 3 days</option><option value="168">Last 7 days</option>
+            </select>
+            <button type="button" id="digestLoad">Load</button>
+          </div>
+        </header>
+        <article class="doc" id="digestBody"><p class="empty">Press Load.</p></article>
+      </section>
+
+      <section id="view-reports" class="view">
+        <header class="bar">
+          <div><h1>Postmortems</h1><p class="sub">A grounded timeline of one investigation, checked against the tamper-evident record.</p></div>
+          <form class="bar-actions" id="reportForm">
+            <input id="reportId" placeholder="session or episode id" aria-label="Episode id" spellcheck="false">
+            <button type="submit">Open</button>
+          </form>
+        </header>
+        <div id="reportVerdict"></div>
+        <article class="doc" id="reportBody"><p class="empty">Enter a session id, or use the Postmortem button in Chat.</p></article>
+        <details class="raw" id="replayBox" hidden><summary>Recorded events</summary><div class="table-wrap"><table class="table" id="replayTable"><thead><tr><th>#</th><th>Type</th><th>Detail</th></tr></thead><tbody></tbody></table></div></details>
+      </section>
+
+      <section id="view-status" class="view">
+        <header class="bar">
+          <div><h1>Status</h1><p class="sub">What is running, and what is allowed to act.</p></div>
+          <div class="bar-actions"><button type="button" id="statusRefresh" class="ghost">Refresh</button></div>
+        </header>
+        <div id="statusBody"></div>
+      </section>
+
+      <section id="view-manage" class="view">
+        <header class="bar"><div><h1>Manage</h1><p class="sub">Detectors and remembered preferences.</p></div></header>
+        <div class="split">
+          <div class="panel">
+            <h2>Detectors</h2>
+            <form id="detForm" class="stack">
+              <textarea id="detDesc" rows="2" placeholder="Describe a failure in plain English, e.g. pods killed for running out of memory" aria-label="Detector description"></textarea>
+              <div class="row"><input id="detName" placeholder="name (optional)" aria-label="Name"><button type="submit" id="detCreate">Author as shadow</button></div>
+            </form>
+            <p class="hint">New detectors start as <b>shadow</b>: they observe but never act until a person promotes them.</p>
+            <div id="detList"></div>
+          </div>
+          <div class="panel">
+            <h2>Preferences</h2>
+            <form id="prefForm" class="row">
+              <input id="prefKey" placeholder="key, e.g. default_namespace" aria-label="Key">
+              <input id="prefVal" placeholder="value" aria-label="Value">
+              <button type="submit">Remember</button>
+            </form>
+            <div id="prefList"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="keyDialog">
+    <form method="dialog" id="keyForm" class="stack">
+      <h2>Connect</h2>
+      <p class="hint">Paste an API key for this server. Leave it empty if the server runs without keys.</p>
+      <input id="keyInput" type="password" autocomplete="off" placeholder="API key" aria-label="API key">
+      <label class="check"><input type="checkbox" id="keyRemember"> remember on this device</label>
+      <p class="err" id="keyErr" hidden></p>
+      <div class="row end"><button type="button" class="ghost" id="keyCancel">Cancel</button><button type="submit">Connect</button></div>
+    </form>
+  </dialog>
+
+  <script src="/ui/md.js"></script>
+  <script src="/ui/app.js"></script>
+</body>
+</html>
