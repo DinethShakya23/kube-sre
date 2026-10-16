@@ -63,6 +63,13 @@ code,
   font-size: 0.86em;
 }
 
+/* No ligatures: they draw -- as one long dash, which misleads in a command. */
+code,
+pre,
+.mono {
+  font-variant-ligatures: none;
+}
+
 code {
   background: rgba(124, 140, 255, 0.1);
   color: #c9d0ff;

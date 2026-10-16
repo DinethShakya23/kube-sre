@@ -72,6 +72,9 @@ npm run dev      # http://localhost:5173/ui/, talks to the server at 127.0.0.1:8
 npm run build    # writes internal/web/static; commit the result
 ```
 
+The marketing site lives in `ui/site` and shares the same components. `npm run dev:site` previews it and
+`npm run build:site` writes `ui/site-dist`, a static folder to serve at the domain root (not committed).
+
 They use `--server` / `KUBESRE_URL` (default `http://localhost:8000`) and `--key` / `KUBESRE_API_KEY`.
 
 Operating the hash chains and backups (these talk to the database directly):
