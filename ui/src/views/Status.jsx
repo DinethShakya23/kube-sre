@@ -20,21 +20,22 @@ function Part({ title, state, okText, offText, children }) {
   );
 }
 
-export default function Status() {
+export default function Status({ isPublic = false }) {
   const [health, setHealth] = useState(null);
   const [v5, setV5] = useState(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [h, s] = await Promise.all([getJSON('/healthz'), getJSON('/v1/v5/status').catch(() => null)]);
+      // The safety brakes are not shown to the public demo, so it does not ask.
+      const [h, s] = await Promise.all([getJSON('/healthz'), isPublic ? null : getJSON('/v1/v5/status').catch(() => null)]);
       setHealth(h);
       setV5(s);
       setError('');
     } catch (e) {
       setError(e.message);
     }
-  }, []);
+  }, [isPublic]);
 
   useEffect(() => {
     load();

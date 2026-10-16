@@ -31,10 +31,20 @@ export function hasKey() {
   return key !== '';
 }
 
+// The CSRF header proves a cookie authenticated request came from this page.
 export function headers(extra) {
-  const h = { ...(extra || {}) };
+  const h = { 'X-KubeSre-CSRF': '1', ...(extra || {}) };
   if (key) h.Authorization = 'Bearer ' + key;
   return h;
+}
+
+export async function publicConfig() {
+  try {
+    const r = await fetch('/v1/public/config');
+    return r.ok ? await r.json() : {};
+  } catch {
+    return {};
+  }
 }
 
 export function errText(t) {

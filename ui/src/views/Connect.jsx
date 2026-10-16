@@ -4,7 +4,7 @@ import BlurText from '../components/reactbits/BlurText/BlurText.jsx';
 import { Logo } from '../components/Icons.jsx';
 import { setKey } from '../lib/api.js';
 
-export default function Connect({ state, error, canCancel, onCancel, connect }) {
+export default function Connect({ state, error, canCancel, adminLogin, onCancel, connect }) {
   const [value, setValue] = useState('');
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +81,11 @@ export default function Connect({ state, error, canCancel, onCancel, connect }) 
               Don't have one? Whoever runs this server can make one with <code>kube-sre set KUBESRE_READONLY_KEYS=...</code>. A read only key is
               plenty for looking around.
             </p>
+            {adminLogin && (
+              <p className="small muted">
+                Have an admin account? <a href="/admin">Sign in with a password</a> instead.
+              </p>
+            )}
           </form>
         )}
       </div>

@@ -4,6 +4,7 @@ import BlurText from '../components/reactbits/BlurText/BlurText.jsx';
 import ShinyText from '../components/reactbits/ShinyText/ShinyText.jsx';
 import StarBorder from '../components/reactbits/StarBorder/StarBorder.jsx';
 import { Markdown } from '../components/ui.jsx';
+import HumanCheck from '../components/HumanCheck.jsx';
 import { AlertIcon, BookIcon, Logo, PlusIcon, SendIcon, StopIcon } from '../components/Icons.jsx';
 import { canWrite, errText, headers, newSessionId, readSSE } from '../lib/api.js';
 
@@ -13,6 +14,9 @@ const SUGGESTIONS = [
   "What's wrong in the shop namespace?",
   'What changed in the last hour?'
 ];
+
+// The demo cluster has these apps broken on purpose.
+const PUBLIC_SUGGESTIONS = ['Why is checkout crashing?', "Why can't payments start?", 'Why is search not ready?', 'What is wrong with recommender?'];
 
 const RISK_WORD = { high: 'High risk', medium: 'Medium risk', low: 'Low risk' };
 
@@ -35,15 +39,23 @@ function stepText(ev) {
 
 let nextId = 1;
 
-export default function Chat({ role, draft, active, openReport, notify }) {
+export default function Chat({ role, cfg = {}, draft, active, openReport, notify }) {
   const [session, setSession] = useState(newSessionId);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [approval, setApproval] = useState(null);
+  const [verified, setVerified] = useState(!!cfg.verified);
+  const [checking, setChecking] = useState(null); // the question waiting on the human check
   const abortRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
+
+  const isPublic = role === 'public';
+  const maxChars = isPublic ? cfg.max_question_chars || 0 : 0;
+  const needsCheck = isPublic && !!cfg.turnstile_site_key && !verified;
+
+  useEffect(() => setVerified(!!cfg.verified), [cfg.verified]);
 
   useEffect(() => {
     if (!draft) return;
@@ -64,9 +76,21 @@ export default function Chat({ role, draft, active, openReport, notify }) {
     setMessages(ms => ms.map(m => (m.id === id ? { ...m, ...fn(m) } : m)));
   }
 
-  async function send(text) {
+  function send(text) {
     text = text.trim();
     if (!text || busy) return;
+    if (maxChars && text.length > maxChars) {
+      notify('Please keep questions under ' + maxChars + ' characters.', true);
+      return;
+    }
+    if (needsCheck) {
+      setChecking(text);
+      return;
+    }
+    ask(text);
+  }
+
+  async function ask(text) {
     const botId = nextId++;
     setMessages(ms => [
       ...ms,
@@ -121,6 +145,12 @@ export default function Chat({ role, draft, active, openReport, notify }) {
     } catch (e) {
       if (e.name === 'AbortError') {
         patch(botId, () => ({ text: answer + '\n\n_Okay, I stopped there._', streaming: false }));
+      } else if (e.status === 403 && /verification_required/.test(e.message)) {
+        setVerified(false);
+        patch(botId, () => ({ text: 'Please do the quick check first, then ask again.', failed: true, streaming: false }));
+      } else if (isPublic && (e.status === 429 || e.status === 503 || e.status === 422)) {
+        // The demo's own limits already explain themselves in plain words.
+        patch(botId, () => ({ text: e.message, failed: true, streaming: false }));
       } else {
         const why =
           e.status === 401 || e.status === 403
@@ -163,7 +193,12 @@ export default function Chat({ role, draft, active, openReport, notify }) {
       <header className="chat-head">
         <div>
           <h1>Chat</h1>
-          <p className="lede">I answer from live reads of the cluster. Any change waits for your okay.</p>
+          <p className="lede">
+            {isPublic
+              ? 'This is a read only demo. Ask about the broken shop apps; nothing here can change the cluster.' +
+                (cfg.questions_per_hour ? ' You get ' + cfg.questions_per_hour + ' questions an hour.' : '')
+              : 'I answer from live reads of the cluster. Any change waits for your okay.'}
+          </p>
         </div>
         <div className="page-actions">
           <span className="chip mono" title={'Conversation id ' + session}>
@@ -189,13 +224,17 @@ export default function Chat({ role, draft, active, openReport, notify }) {
               Ask me anything about what's running. I'll look at pods, events, logs and metrics, then tell you what I think is wrong and how to fix it.
             </p>
             <div className="suggestions">
-              {SUGGESTIONS.map(s => (
+              {(isPublic ? PUBLIC_SUGGESTIONS : SUGGESTIONS).map(s => (
                 <button key={s} type="button" className="suggestion" onClick={() => send(s)}>
                   {s}
                 </button>
               ))}
             </div>
-            {!canWrite(role) && <p className="small muted">Your key is read only, so I can look and explain, but I can't apply fixes for you.</p>}
+            {isPublic ? (
+              <p className="small muted">A few apps in this demo cluster are broken on purpose. Pick one above, or ask your own question.</p>
+            ) : (
+              !canWrite(role) && <p className="small muted">Your key is read only, so I can look and explain, but I can't apply fixes for you.</p>
+            )}
           </div>
         ) : (
           messages.map(m =>
@@ -265,8 +304,9 @@ export default function Chat({ role, draft, active, openReport, notify }) {
               e.currentTarget.form.requestSubmit();
             }
           }}
-          placeholder="Ask about a pod, a namespace, or just say what feels off"
+          placeholder={isPublic ? 'Ask why something in the shop is broken' : 'Ask about a pod, a namespace, or just say what feels off'}
           aria-label="Message"
+          maxLength={maxChars || undefined}
         />
         {busy ? (
           <button type="button" className="ghost icon-btn" onClick={() => abortRef.current?.abort()} title="Stop">
@@ -280,7 +320,22 @@ export default function Chat({ role, draft, active, openReport, notify }) {
           </button>
         )}
       </form>
-      <p className="composer-hint">Enter sends, Shift+Enter adds a new line.</p>
+      <p className="composer-hint">
+        Enter sends, Shift+Enter adds a new line.
+        {maxChars > 0 && input.length > maxChars * 0.8 && ' ' + (maxChars - input.length) + ' characters left.'}
+      </p>
+      {checking && (
+        <HumanCheck
+          siteKey={cfg.turnstile_site_key}
+          onPassed={() => {
+            const q = checking;
+            setVerified(true);
+            setChecking(null);
+            ask(q);
+          }}
+          onCancel={() => setChecking(null)}
+        />
+      )}
     </section>
   );
 }
