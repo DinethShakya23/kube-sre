@@ -471,9 +471,81 @@ textarea {
   font-weight: 640;
 }
 
-.finding-obj {
+button.finding-obj {
+  justify-self: start;
+  padding: 0;
+  background: none;
   color: #c9d0ff;
+  font-weight: 400;
+  text-align: left;
   overflow-wrap: anywhere;
+}
+
+button.finding-obj:hover {
+  transform: none;
+  text-decoration: underline;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.search {
+  flex: 1 1 240px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+.search:focus-within {
+  border-color: rgba(124, 140, 255, 0.6);
+}
+
+.search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 0.55rem 0;
+}
+
+.search input:focus-visible {
+  outline: none;
+}
+
+.filter {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.filter select {
+  min-width: 8.5rem;
+  font-size: 0.9rem;
+}
+
+.toolbar .check {
+  padding-bottom: 0.55rem;
+}
+
+.result-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: -0.4rem;
+}
+
+button.more {
+  justify-self: center;
+  margin-top: 0.5rem;
 }
 
 .finding-evidence {
