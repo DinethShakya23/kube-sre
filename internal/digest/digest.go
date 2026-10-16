@@ -80,7 +80,9 @@ type Digest struct {
 	RollbackPoints    []RollbackPoint     `json:"rollback_points"`
 	Degraded          bool                `json:"degraded"`
 	DegradedReasons   []string            `json:"degraded_reasons"`
-	Summary           string              `json:"summary"`
+	// Notes are features switched off on purpose: worth saying, but not a gap in what was recorded.
+	Notes   []string `json:"notes"`
+	Summary string   `json:"summary"`
 }
 
 func decode(raw []byte) map[string]any {
@@ -114,15 +116,15 @@ func (b *Builder) Build(ctx context.Context, hours float64) *Digest {
 	now := b.now()
 	cutoff := now.Add(-time.Duration(hours * float64(time.Hour)))
 	d := &Digest{WindowHours: hours, GeneratedAt: epoch(now), Findings: []Finding{}, AutoInvestigation: []AutoInvestigation{},
-		RollbackPoints: []RollbackPoint{}, DegradedReasons: []string{}}
+		RollbackPoints: []RollbackPoint{}, DegradedReasons: []string{}, Notes: []string{}}
 
 	if !b.Cfg.FlightRecorder {
-		d.DegradedReasons = append(d.DegradedReasons, "the flight recorder is disabled (FLIGHT_RECORDER_ENABLED=false) — "+
-			"no findings, investigations or rollback points were recorded")
+		d.DegradedReasons = append(d.DegradedReasons, "the flight recorder is turned off (FLIGHT_RECORDER_ENABLED=false), "+
+			"so no findings, investigations or undo points were recorded")
 	}
+	// Off by choice: findings are still complete, there is just nothing autonomous to report.
 	if !b.Cfg.Watchtower {
-		d.DegradedReasons = append(d.DegradedReasons, "the watchtower is disabled (WATCHTOWER_ENABLED=false) — "+
-			"no autonomous investigation could have run")
+		d.Notes = append(d.Notes, "Automatic investigations are turned off on this server (WATCHTOWER_ENABLED=false), so nothing was looked into on its own.")
 	}
 	if b.Perception != nil {
 		d.DegradedReasons = append(d.DegradedReasons, perception.Gaps(b.Perception())...)
@@ -133,7 +135,7 @@ func (b *Builder) Build(ctx context.Context, hours float64) *Digest {
 	sessions := map[string]bool{}
 	if err != nil {
 		slog.Warn("digest decision_log query failed", "err", err)
-		d.DegradedReasons = append(d.DegradedReasons, fmt.Sprintf("the decision_log query failed (%v) — findings, rollback points and session counts are unknown", trim(err)))
+		d.DegradedReasons = append(d.DegradedReasons, fmt.Sprintf("the decision_log query failed (%v), so findings, undo points and chat counts are unknown", trim(err)))
 	} else {
 		for rows.Next() {
 			var episode, kind string
@@ -141,7 +143,7 @@ func (b *Builder) Build(ctx context.Context, hours float64) *Digest {
 			var at time.Time
 			if err := rows.Scan(&episode, &kind, &raw, &at); err != nil {
 				slog.Warn("digest decision_log scan failed", "err", err)
-				d.DegradedReasons = append(d.DegradedReasons, "the decision_log rows could not be read — findings, rollback points and session counts are unknown")
+				d.DegradedReasons = append(d.DegradedReasons, "the decision_log rows could not be read, so findings, undo points and chat counts are unknown")
 				break
 			}
 			p := decode(raw)
@@ -182,7 +184,7 @@ func (b *Builder) Build(ctx context.Context, hours float64) *Digest {
 		FROM episodes WHERE started_at >= ? AND trigger_kind <> 'backfill' ORDER BY started_at`), epoch(cutoff))
 	if err != nil {
 		slog.Warn("digest episodes query failed", "err", err)
-		d.DegradedReasons = append(d.DegradedReasons, fmt.Sprintf("the episodes query failed (%v) — autonomous investigations are unknown", trim(err)))
+		d.DegradedReasons = append(d.DegradedReasons, fmt.Sprintf("the episodes query failed (%v), so automatic investigations are unknown", trim(err)))
 	} else {
 		for eps.Next() {
 			var kind, summary string
@@ -191,7 +193,7 @@ func (b *Builder) Build(ctx context.Context, hours float64) *Digest {
 			var started float64
 			var detailS, outcomeS, nsS *string
 			if err := eps.Scan(&kind, &detailS, &summary, &outcomeS, &verified, &nsS, &pb, &started); err != nil {
-				d.DegradedReasons = append(d.DegradedReasons, "the episode rows could not be read — autonomous investigations are unknown")
+				d.DegradedReasons = append(d.DegradedReasons, "the episode rows could not be read, so automatic investigations are unknown")
 				break
 			}
 			if !strings.Contains(deref(detailS), "autonomous investigation") && kind != "detector" {
@@ -237,27 +239,57 @@ func oneLiner(d *Digest) string {
 			fixes++
 		}
 	}
+	window := windowText(d.WindowHours)
 	if len(d.DegradedReasons) > 0 {
 		// Never "quiet": an empty digest here is an absence of records, not of events,
 		// and the two look identical from the outside.
-		seen := "nothing readable"
+		seen := "nothing could be read"
 		if findings > 0 || autos > 0 {
-			seen = fmt.Sprintf("%d finding(s), %d investigation(s) readable", findings, autos)
+			seen = "what could be read: " + plural(findings, "finding", "findings") + " and " + plural(autos, "investigation", "investigations")
 		}
 		more := ""
-		if len(d.DegradedReasons) > 1 {
-			more = fmt.Sprintf(" (+%d more reason(s))", len(d.DegradedReasons)-1)
+		if n := len(d.DegradedReasons) - 1; n > 0 {
+			more = ", and " + plural(n, "other problem", "other problems") + " listed below"
 		}
-		return fmt.Sprintf("Digest INCOMPLETE for the last %.0fh — %s. This is NOT a quiet watch: %s%s.", d.WindowHours, seen, d.DegradedReasons[0], more)
+		return fmt.Sprintf("This digest has gaps for %s: %s%s. Here's %s.", window, d.DegradedReasons[0], more, seen)
 	}
 	if findings == 0 && autos == 0 {
-		return fmt.Sprintf("Quiet watch: no findings in the last %.0fh.", d.WindowHours)
+		return fmt.Sprintf("All quiet: nothing fired in %s.", window)
 	}
-	fixText := ""
-	if fixes > 0 {
-		fixText = fmt.Sprintf(", %d verified fix(es)", fixes)
+	var parts []string
+	if findings > 0 {
+		parts = append(parts, plural(findings, "finding", "findings")+" across "+plural(len(problems(d.Findings)), "problem", "problems"))
 	}
-	return fmt.Sprintf("%d finding(s), %d autonomous investigation(s)%s in the last %.0fh.", findings, autos, fixText, d.WindowHours)
+	if autos > 0 {
+		a := plural(autos, "automatic investigation", "automatic investigations")
+		if fixes > 0 {
+			a += " (" + plural(fixes, "fix", "fixes") + " verified)"
+		}
+		parts = append(parts, a)
+	}
+	return "In " + window + ": " + strings.Join(parts, ", and ") + "."
+}
+
+func windowText(hours float64) string {
+	switch {
+	case hours == 24:
+		return "the last day"
+	case hours == 168:
+		return "the last week"
+	case hours >= 48 && int(hours)%24 == 0:
+		return fmt.Sprintf("the last %d days", int(hours)/24)
+	case hours == 1:
+		return "the last hour"
+	}
+	return fmt.Sprintf("the last %.0f hours", hours)
+}
+
+// plural writes "1 finding" or "842 findings".
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 func tail[T any](xs []T, n int) []T {
@@ -267,39 +299,174 @@ func tail[T any](xs []T, n int) []T {
 	return xs
 }
 
-func hhmm(at float64) string { return time.Unix(int64(at), 0).Format("15:04") }
+// atText says when, relative to now: "at 09:14", "yesterday at 22:40" or "on Mon 14 Oct at 08:00".
+func atText(at, now float64) string {
+	t, n := time.Unix(int64(at), 0), time.Unix(int64(now), 0)
+	day := func(x time.Time) time.Time { y, m, d := x.Date(); return time.Date(y, m, d, 0, 0, 0, 0, x.Location()) }
+	switch day(n).Sub(day(t)) / (24 * time.Hour) {
+	case 0:
+		return "at " + t.Format("15:04")
+	case 1:
+		return "yesterday at " + t.Format("15:04")
+	}
+	return "on " + t.Format("Mon 2 Jan") + " at " + t.Format("15:04")
+}
+
+// friendly says what a detector saw in everyday words; unknown ones keep their name.
+var friendly = map[string]string{
+	"CommandHardcodedFailure":      "exits on start",
+	"ContainerCreatingStuck":       "stuck creating its container",
+	"CrashLoopBackOff":             "crash looping",
+	"CreateContainerConfigError":   "has a broken container config",
+	"DnsResolutionFailure":         "failing DNS lookups",
+	"Evicted":                      "evicted",
+	"HPANotScaling":                "autoscaler not scaling",
+	"ImagePullBackOff":             "can't pull its image",
+	"InitContainerFailing":         "init container failing",
+	"JobBackoffLimitExceeded":      "job gave up after too many retries",
+	"LivenessProbeFailing":         "failing its liveness probe",
+	"NetworkPolicyBlocking":        "blocked by a network policy",
+	"NodeNotReady":                 "node not ready",
+	"OOMKilled":                    "ran out of memory",
+	"PodDisruptionBudgetBlocking":  "blocked by a disruption budget",
+	"PendingInsufficientResources": "pending, not enough resources",
+	"PendingSchedulingConstraints": "pending, can't be scheduled",
+	"PvcPending":                   "waiting for its volume",
+	"QuotaExceeded":                "over its quota",
+	"ReadinessProbeFailing":        "failing its readiness probe",
+	"DeploymentRolloutStuck":       "rollout stuck",
+	"ServiceNoEndpoints":           "service has no endpoints",
+	"ServiceUnreachable":           "service unreachable",
+	"StatefulSetRolloutStuck":      "rollout stuck",
+	"TerminatingStuck":             "stuck terminating",
+	"TlsCertificateExpired":        "TLS certificate expired",
+	"WebhookAdmissionRejected":     "rejected by an admission webhook",
+}
+
+func describe(playbook string) string {
+	if f, ok := friendly[playbook]; ok {
+		return f + " (" + playbook + ")"
+	}
+	return playbook
+}
+
+// problem is every firing on one object, so repeats read as one line with a count.
+type problem struct {
+	where string
+	last  float64
+	kinds []kind
+}
+
+type kind struct {
+	playbook string
+	count    int
+	eta      *float64
+	predict  bool
+}
+
+func problems(fs []Finding) []problem {
+	byObj := map[string]*problem{}
+	var order []string
+	for _, f := range fs {
+		where := f.Object
+		if f.Namespace != "" {
+			where = f.Namespace + "/" + f.Object
+		}
+		p, ok := byObj[where]
+		if !ok {
+			p = &problem{where: where}
+			byObj[where] = p
+			order = append(order, where)
+		}
+		p.last = max(p.last, f.At)
+		i := -1
+		for j, k := range p.kinds {
+			if k.playbook == f.Playbook {
+				i = j
+			}
+		}
+		if i < 0 {
+			p.kinds = append(p.kinds, kind{playbook: f.Playbook})
+			i = len(p.kinds) - 1
+		}
+		p.kinds[i].count++
+		if f.Severity == "predicted" {
+			p.kinds[i].predict, p.kinds[i].eta = true, f.ETAMinutes
+		}
+	}
+	out := make([]problem, 0, len(order))
+	for _, w := range order {
+		out = append(out, *byObj[w])
+	}
+	sortBy(out, func(a, b problem) bool { return a.last > b.last })
+	return out
+}
+
+func sortBy[T any](xs []T, less func(a, b T) bool) {
+	for i := 1; i < len(xs); i++ {
+		for j := i; j > 0 && less(xs[j], xs[j-1]); j-- {
+			xs[j], xs[j-1] = xs[j-1], xs[j]
+		}
+	}
+}
+
+func (k kind) text() string {
+	s := describe(k.playbook)
+	if k.predict {
+		if k.eta != nil {
+			s = fmt.Sprintf("likely %s in about %.0f minutes", s, *k.eta)
+		} else {
+			s = "likely " + s + " soon"
+		}
+	}
+	if k.count > 1 {
+		s += fmt.Sprintf(", %d times", k.count)
+	}
+	return s
+}
+
+const maxProblems = 15
 
 // Markdown renders the digest.
 func (d *Digest) Markdown() string {
-	l := []string{fmt.Sprintf("# kube-sre digest — last %.0fh", d.WindowHours), "", d.Summary}
+	l := []string{"# What happened in " + windowText(d.WindowHours), "", d.Summary}
 	if len(d.DegradedReasons) > 0 {
-		l = append(l, "", "> **⚠️ This digest is incomplete — do not read it as an all-clear.**")
+		l = append(l, "", "> **Heads up: parts of this window couldn't be read, so don't take it as an all clear.**")
 		for _, r := range d.DegradedReasons {
-			l = append(l, "> - "+r)
+			l = append(l, "> - "+upperFirst(r)+".")
 		}
 	}
-	if len(d.Findings) > 0 {
-		l = append(l, "", "## Detector findings (zero-token)")
-		for _, f := range tail(d.Findings, 20) {
-			tag := ""
-			if f.Severity == "predicted" {
-				if f.ETAMinutes != nil {
-					tag = fmt.Sprintf(" _(predicted ~%.0fm)_", *f.ETAMinutes)
-				} else {
-					tag = " _(predicted)_"
-				}
+	for _, n := range d.Notes {
+		l = append(l, "", "_"+n+"_")
+	}
+	if ps := problems(d.Findings); len(ps) > 0 {
+		l = append(l, "", "## What my detectors spotted", "", "Newest first. These checks run without the model, so they cost nothing.", "")
+		for _, p := range ps[:min(len(ps), maxProblems)] {
+			kinds := make([]string, len(p.kinds))
+			for i, k := range p.kinds {
+				kinds[i] = k.text()
 			}
-			l = append(l, fmt.Sprintf("- %s **%s** %s/%s%s", hhmm(f.At), f.Playbook, f.Namespace, f.Object, tag))
+			l = append(l, fmt.Sprintf("- **%s**: %s. Last seen %s.", p.where, strings.Join(kinds, "; "), atText(p.last, d.GeneratedAt)))
+		}
+		if len(ps) > maxProblems {
+			l = append(l, "", fmt.Sprintf("_And %s, on the Findings page._", plural(len(ps)-maxProblems, "more", "more")))
 		}
 	}
 	if len(d.AutoInvestigation) > 0 {
-		l = append(l, "", "## Autonomous investigations")
-		for _, a := range tail(d.AutoInvestigation, 10) {
-			status := a.Outcome
+		l = append(l, "", "## What I looked into on my own", "")
+		for _, a := range reverse(tail(d.AutoInvestigation, 10)) {
+			status := map[string]string{"resolved": "fixed", "": "reported back"}[a.Outcome]
 			if status == "" {
-				status = "report"
+				status = a.Outcome
 			}
-			l = append(l, fmt.Sprintf("- %s [%s] ns=%s: %s", hhmm(a.At), status, a.Namespace, clip(a.Summary, 160)))
+			if a.Verified != nil && *a.Verified {
+				status += " and verified"
+			}
+			where := ""
+			if a.Namespace != "" {
+				where = " in " + a.Namespace
+			}
+			l = append(l, fmt.Sprintf("- %s%s, %s: %s", upperFirst(atText(a.At, d.GeneratedAt)), where, status, clip(a.Summary, 160)))
 		}
 	}
 	if len(d.RollbackPoints) > 0 {
@@ -309,26 +476,41 @@ func (d *Digest) Markdown() string {
 				armed++
 			}
 		}
-		l = append(l, "", fmt.Sprintf("## Pre-mutation state captures (%d of %d restorable)", armed, len(d.RollbackPoints)))
-		for _, r := range tail(d.RollbackPoints, 10) {
+		l = append(l, "", "## Undo points", "", fmt.Sprintf("Before each change I saved what was there. %d of %d can be put back.", armed, len(d.RollbackPoints)), "")
+		for _, r := range reverse(tail(d.RollbackPoints, 10)) {
 			var mark string
 			switch {
 			case r.Restorable == nil:
-				mark = "⚠️ restorability unknown (captured before this was recorded)"
+				mark = "can't tell if this one can be restored (it was saved before that was tracked)"
 			case *r.Restorable:
-				mark = "restorable"
+				mark = "can be restored"
 			default:
 				notes := strings.Join(r.CaptureNotes, "; ")
 				if notes == "" {
 					notes = "redacted or truncated"
 				}
-				mark = "⚠️ NOT restorable — do not apply (" + notes + ")"
+				mark = "can't be restored safely, so don't apply it (" + notes + ")"
 			}
-			l = append(l, fmt.Sprintf("- %s `%s` [%s] — %s", hhmm(r.At), r.RollbackID, mark, clip(r.Command, 80)))
+			l = append(l, fmt.Sprintf("- %s, `%s`: %s. The change was `%s`.", upperFirst(atText(r.At, d.GeneratedAt)), r.RollbackID, mark, clip(r.Command, 80)))
 		}
 	}
 	if d.UserSessions > 0 {
-		l = append(l, "", fmt.Sprintf("_%d user session(s) in the window._", d.UserSessions))
+		l = append(l, "", "_"+plural(d.UserSessions, "chat", "chats")+" with me in this window._")
 	}
 	return strings.Join(l, "\n")
+}
+
+func reverse[T any](xs []T) []T {
+	out := make([]T, len(xs))
+	for i, x := range xs {
+		out[len(xs)-1-i] = x
+	}
+	return out
+}
+
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

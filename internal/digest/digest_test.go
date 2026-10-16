@@ -38,21 +38,24 @@ func newRig(t *testing.T, env map[string]string) *rig {
 func TestQuietWatchOnlyWhenEverythingWasReadable(t *testing.T) {
 	r := newRig(t, nil)
 	d := r.b.Build(context.Background(), 24)
-	if d.Degraded || !strings.HasPrefix(d.Summary, "Quiet watch") {
+	if d.Degraded || !strings.HasPrefix(d.Summary, "All quiet") {
 		t.Errorf("%+v", d)
 	}
 }
 
 func TestDisabledSourcesAreNeverQuiet(t *testing.T) {
-	r := newRig(t, map[string]string{"FLIGHT_RECORDER_ENABLED": "false", "WATCHTOWER_ENABLED": "false"})
+	r := newRig(t, map[string]string{"FLIGHT_RECORDER_ENABLED": "false"})
 	d := r.b.Build(context.Background(), 24)
-	if !d.Degraded || len(d.DegradedReasons) < 2 || !strings.Contains(d.Summary, "NOT a quiet watch") || !strings.Contains(d.Summary, "(+1 more") {
+	if !d.Degraded || len(d.DegradedReasons) != 1 || !strings.Contains(d.Summary, "has gaps") || strings.Contains(d.Summary, "quiet") {
 		t.Errorf("%+v", d)
 	}
 	r.b.Perception = func() perception.State {
 		return perception.State{Sensorium: perception.Disabled, SensoriumReason: "sensorium is off"}
 	}
 	d = r.b.Build(context.Background(), 24)
+	if !strings.Contains(d.Summary, "1 other problem listed below") {
+		t.Errorf("%s", d.Summary)
+	}
 	found := false
 	for _, x := range d.DegradedReasons {
 		found = found || strings.Contains(x, "sensorium is off")
@@ -91,7 +94,7 @@ func TestDigestCollectsFindingsRollbacksAndSessions(t *testing.T) {
 		t.Errorf("sessions %d (auto episodes and findings streams are not user sessions)", d.UserSessions)
 	}
 	md := d.Markdown()
-	for _, want := range []string{"## Detector findings", "predicted ~9m", "NOT restorable — do not apply (truncated)", "0 of 1 restorable", "2 user session(s)"} {
+	for _, want := range []string{"## What my detectors spotted", "likely oom in about 9 minutes", "can't be restored safely, so don't apply it (truncated)", "0 of 1 can be put back", "2 chats with me"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown missing %q:\n%s", want, md)
 		}
@@ -119,7 +122,7 @@ func TestAutonomousInvestigationsComeFromEpisodes(t *testing.T) {
 	if len(d.AutoInvestigation) != 1 || d.AutoInvestigation[0].Outcome != "resolved" {
 		t.Fatalf("%+v", d.AutoInvestigation)
 	}
-	if !strings.Contains(d.Summary, "1 verified fix(es)") {
+	if !strings.Contains(d.Summary, "1 automatic investigation (1 fix verified)") || strings.Contains(d.Summary, "0 findings") {
 		t.Errorf("%s", d.Summary)
 	}
 }
@@ -239,5 +242,51 @@ func TestNarrativeIsOptInAndItsFailureIsSaid(t *testing.T) {
 	off.rec.Close()
 	if pm := off.pm.Build(context.Background(), "ep5"); pm.Narrative != nil || len(pm.EnrichmentFailed) != 0 {
 		t.Errorf("flag off: %+v", pm)
+	}
+}
+
+func TestAFeatureOffByChoiceIsANoteNotAGap(t *testing.T) {
+	r := newRig(t, map[string]string{"WATCHTOWER_ENABLED": "false"})
+	d := r.b.Build(context.Background(), 24)
+	if d.Degraded || len(d.Notes) != 1 || !strings.HasPrefix(d.Summary, "All quiet") {
+		t.Errorf("%+v", d)
+	}
+	if md := d.Markdown(); !strings.Contains(md, "Automatic investigations are turned off") || strings.Contains(md, "Heads up") {
+		t.Errorf("%s", md)
+	}
+}
+
+func TestRepeatsAreGroupedNewestFirst(t *testing.T) {
+	r := newRig(t, nil)
+	for i := 0; i < 3; i++ {
+		r.rec.Record("findings:c1", "finding", map[string]any{"playbook": "CrashLoopBackOff", "namespace": "shop", "object": "checkout"})
+	}
+	r.rec.Record("findings:c1", "finding", map[string]any{"playbook": "OOMKilled", "namespace": "shop", "object": "checkout"})
+	time.Sleep(1100 * time.Millisecond)
+	r.rec.Record("findings:c1", "finding", map[string]any{"playbook": "ImagePullBackOff", "namespace": "shop", "object": "payments"})
+	r.rec.Close()
+	d := r.b.Build(context.Background(), 24)
+	md := d.Markdown()
+	if !strings.Contains(md, "**shop/checkout**: crash looping (CrashLoopBackOff), 3 times; ran out of memory (OOMKilled)") {
+		t.Errorf("not grouped:\n%s", md)
+	}
+	if strings.Index(md, "shop/payments") > strings.Index(md, "shop/checkout") {
+		t.Errorf("newest problem must come first:\n%s", md)
+	}
+	if !strings.Contains(d.Summary, "5 findings across 2 problems") {
+		t.Errorf("%s", d.Summary)
+	}
+	if strings.ContainsAny(md, "—–") {
+		t.Errorf("long dashes in the digest:\n%s", md)
+	}
+}
+
+func TestTimesSayWhichDay(t *testing.T) {
+	now := time.Date(2026, 10, 16, 9, 30, 0, 0, time.Local)
+	at := func(d time.Duration) float64 { return epoch(now.Add(-d)) }
+	for d, want := range map[time.Duration]string{time.Hour: "at 08:30", 11 * time.Hour: "yesterday at 22:30", 49 * time.Hour: "on Wed 14 Oct at 08:30"} {
+		if got := atText(at(d), epoch(now)); got != want {
+			t.Errorf("%v ago: %q, want %q", d, got, want)
+		}
 	}
 }

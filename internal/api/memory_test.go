@@ -136,7 +136,7 @@ func TestDigestAndPostmortemEndpoints(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(body, `"window_hours":12`) {
 		t.Errorf("%d %s", resp.StatusCode, body)
 	}
-	if _, body = r.do(t, "GET", "/v1/digest?format=markdown", "", nil); !strings.Contains(body, "# kube-sre digest") {
+	if _, body = r.do(t, "GET", "/v1/digest?format=markdown", "", nil); !strings.Contains(body, "# What happened in") {
 		t.Errorf("%s", body)
 	}
 	for _, bad := range []string{"hours=0", "hours=500", "hours=x", "format=xml"} {

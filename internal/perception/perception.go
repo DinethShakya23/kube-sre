@@ -342,31 +342,39 @@ func Gaps(st State) []string {
 	case Disabled:
 		gaps = append(gaps, firstNonEmpty(st.SensoriumReason, absencePhrase("", "")))
 	case Starting:
-		gaps = append(gaps, "no kubectl watch stream has started - the sensorium was not perceiving, so no detector finding could have been produced")
+		gaps = append(gaps, "no watch on the cluster has started yet, so no detector could have fired")
 	case Stopped:
-		gaps = append(gaps, "every kubectl watch stream has stopped - no detector finding could have been produced ("+streamReasons(st.Streams)+")")
+		gaps = append(gaps, "every watch on the cluster has stopped ("+streamReasons(st.Streams)+"), so no detector could have fired")
 	case Reconnecting:
-		gaps = append(gaps, "no kubectl watch stream is connected (reconnecting: "+streamReasons(st.Streams)+") - detector findings are incomplete for this window")
+		gaps = append(gaps, "the watch on the cluster is reconnecting ("+streamReasons(st.Streams)+"), so some findings may be missing")
 	}
 	if st.Predictive == Blind {
 		reason := "no reason recorded"
 		if st.PredictiveError != nil {
 			reason = *st.PredictiveError
 		}
-		gaps = append(gaps, "predictive detection is blind - Prometheus could not be queried ("+reason+"), so no predicted finding could have fired")
+		gaps = append(gaps, "predictions are blind because Prometheus could not be queried ("+reason+"), so nothing predicted could have fired")
 	}
 	// A scoped sensorium is not broken; it is doing what it was told. It is still
 	// blind outside its scope, and whoever reads an empty list is usually not the one
 	// who set the flag.
-	if len(st.WatchNamespaces) > 0 {
-		gaps = append(gaps, fmt.Sprintf("the sensorium watches only %d namespace(s) (%s) - nothing outside them was perceived, so an empty findings list is not a statement about the cluster",
-			len(st.WatchNamespaces), strings.Join(st.WatchNamespaces, ", ")))
+	if n := len(st.WatchNamespaces); n > 0 {
+		gaps = append(gaps, fmt.Sprintf("only %s watched (%s), so nothing outside them was seen and no findings there says nothing about the cluster",
+			plural(n, "namespace is", "namespaces are"), strings.Join(st.WatchNamespaces, ", ")))
 	}
 	if st.ShedTotal > 0 {
-		gaps = append(gaps, fmt.Sprintf("the observation queue dropped %d event(s) before any detector saw them (queue high-water %d) - findings are incomplete for this window",
-			st.ShedTotal, st.QueueHighWater))
+		gaps = append(gaps, fmt.Sprintf("%s dropped before any detector saw them (the queue peaked at %d), so some findings are missing",
+			plural(st.ShedTotal, "event was", "events were"), st.QueueHighWater))
 	}
 	return gaps
+}
+
+// plural writes "1 event was" or "3 events were".
+func plural[N int | int64](n N, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 func firstNonEmpty(items ...string) string {
@@ -384,20 +392,20 @@ func firstNonEmpty(items ...string) string {
 func absencePhrase(reason, detail string) string {
 	switch reason {
 	case DisabledByFlag:
-		return "the sensorium is switched off (SENSORIUM_ENABLED=false) - no detector finding could have been produced"
+		return "the cluster watcher is turned off (SENSORIUM_ENABLED=false), so no detector could have fired"
 	case NoDetectors:
-		return "the sensorium loaded no compiled detectors, so it did not start - no detector finding could have been produced"
+		return "the cluster watcher loaded no compiled detectors, so it never started and no detector could have fired"
 	case StartFailed:
 		if detail == "" {
 			detail = "no reason recorded"
 		}
-		return "the sensorium FAILED to start (" + detail + ") - this replica has been perceiving nothing since, and this is an outage rather than a setting"
+		return "the cluster watcher failed to start (" + detail + "). This server has watched nothing since, and that is an outage, not a setting"
 	case Standby:
-		return "this replica is a leader-election standby and watches nothing by design; the replica holding the singleton lock is the one that perceives, so read its findings, not this replica's silence"
+		return "this server is a standby and watches nothing by design. The server holding the leader lock does the watching, so read its findings instead"
 	case StoppedReason:
-		return "the sensorium has been stopped (the process is shutting down) - no detector finding could have been produced"
+		return "the cluster watcher has stopped because the server is shutting down, so no detector could have fired"
 	}
-	return "the sensorium has not started yet - no detector finding could have been produced"
+	return "the cluster watcher has not started yet, so no detector could have fired"
 }
 
 func streamReasons(streams []sensorium.StreamHealth) string {

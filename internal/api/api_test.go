@@ -694,7 +694,7 @@ func TestFindingsEndpoint(t *testing.T) {
 	r.srv.Perception = svc
 	svc.RecordStartFailure(context.DeadlineExceeded)
 	_, m = get("")
-	if m["sensorium"] != "disabled" || !strings.Contains(m["sensorium_reason"].(string), "FAILED to start") || m["queue"].(map[string]any)["maxsize"] != float64(10000) {
+	if m["sensorium"] != "disabled" || !strings.Contains(m["sensorium_reason"].(string), "failed to start") || m["queue"].(map[string]any)["maxsize"] != float64(10000) {
 		t.Errorf("%v", m)
 	}
 	if err := svc.Start(context.Background()); err != nil {

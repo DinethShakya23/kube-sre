@@ -101,11 +101,11 @@ func TestAbsenceReasonsAreDistinct(t *testing.T) {
 		t.Errorf("%v", h)
 	}
 	s.RecordStartFailure(os.ErrPermission)
-	if st := s.State(); !strings.Contains(st.SensoriumReason, "FAILED to start (permission denied)") || !strings.Contains(st.SensoriumReason, "outage rather than a setting") {
+	if st := s.State(); !strings.Contains(st.SensoriumReason, "failed to start (permission denied)") || !strings.Contains(st.SensoriumReason, "an outage, not a setting") {
 		t.Errorf("%s", st.SensoriumReason)
 	}
 	s.Stop(Standby, "another replica holds the singleton lock")
-	if st := s.State(); !strings.Contains(st.SensoriumReason, "standby") || !strings.Contains(st.SensoriumReason, "not this replica's silence") {
+	if st := s.State(); !strings.Contains(st.SensoriumReason, "standby") || !strings.Contains(st.SensoriumReason, "watches nothing by design") {
 		t.Errorf("%s", st.SensoriumReason)
 	}
 	s.Stop("", "")
@@ -130,7 +130,7 @@ func TestMissingKubectlIsStoppedNotQuiet(t *testing.T) {
 		t.Errorf("%+v %v", st, s.Status())
 	}
 	g := Gaps(st)
-	if len(g) != 1 || !strings.Contains(g[0], "every kubectl watch stream has stopped") || !strings.Contains(g[0], "kubectl not found") {
+	if len(g) != 1 || !strings.Contains(g[0], "every watch on the cluster has stopped") || !strings.Contains(g[0], "kubectl not found") {
 		t.Errorf("%v", g)
 	}
 }
@@ -164,22 +164,22 @@ func TestNoDetectorsMeansNotStarted(t *testing.T) {
 
 func TestGapsCoverEveryWayToBeBlind(t *testing.T) {
 	scoped := Gaps(State{Sensorium: Active, WatchNamespaces: []string{"shop", "api"}})
-	if len(scoped) != 1 || !strings.Contains(scoped[0], "only 2 namespace(s) (shop, api)") || !strings.Contains(scoped[0], "not a statement about the cluster") {
+	if len(scoped) != 1 || !strings.Contains(scoped[0], "only 2 namespaces are watched (shop, api)") || !strings.Contains(scoped[0], "says nothing about the cluster") {
 		t.Errorf("a scoped sensorium is blind outside its scope: %v", scoped)
 	}
 	shed := Gaps(State{Sensorium: Active, ShedTotal: 42, QueueHighWater: 10000})
-	if len(shed) != 1 || !strings.Contains(shed[0], "dropped 42 event(s)") || !strings.Contains(shed[0], "high-water 10000") {
+	if len(shed) != 1 || !strings.Contains(shed[0], "42 events were dropped") || !strings.Contains(shed[0], "peaked at 10000") {
 		t.Errorf("a shedding queue leaves every instrument healthy: %v", shed)
 	}
 	e := "prometheus down"
 	blind := Gaps(State{Sensorium: Active, Predictive: Blind, PredictiveError: &e})
-	if len(blind) != 1 || !strings.Contains(blind[0], "predictive detection is blind") || !strings.Contains(blind[0], "prometheus down") {
+	if len(blind) != 1 || !strings.Contains(blind[0], "predictions are blind") || !strings.Contains(blind[0], "prometheus down") {
 		t.Errorf("%v", blind)
 	}
 	if g := Gaps(State{Sensorium: Active, Predictive: Off}); len(g) != 0 {
 		t.Errorf("predictive off is a choice, not a gap: %v", g)
 	}
-	if g := Gaps(State{Sensorium: Starting}); len(g) != 1 || !strings.Contains(g[0], "no kubectl watch stream has started") {
+	if g := Gaps(State{Sensorium: Starting}); len(g) != 1 || !strings.Contains(g[0], "no watch on the cluster has started") {
 		t.Errorf("%v", g)
 	}
 	all := Gaps(State{Sensorium: Reconnecting, Predictive: Blind, WatchNamespaces: []string{"a"}, ShedTotal: 1})
