@@ -63,6 +63,15 @@ and detector and preference management. Paste an API key on first use; the page 
 and every data call still needs the key. On a remote host, tunnel first:
 `ssh -L 8765:127.0.0.1:8765 user@host`.
 
+The UI source is a React app in `ui/`, using components from [React Bits](https://reactbits.dev).
+Its build is committed to `internal/web/static`, so `go build` never needs Node. To change it:
+
+```
+cd ui && npm install
+npm run dev      # http://localhost:5173/ui/, talks to the server at 127.0.0.1:8765 (or $KUBESRE_URL)
+npm run build    # writes internal/web/static; commit the result
+```
+
 They use `--server` / `KUBESRE_URL` (default `http://localhost:8000`) and `--key` / `KUBESRE_API_KEY`.
 
 Operating the hash chains and backups (these talk to the database directly):
