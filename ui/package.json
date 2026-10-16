@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "dev:site": "vite --config vite.site.config.js",
+    "build:site": "vite build --config vite.site.config.js",
     "test": "node src/lib/md_check.mjs"
   },
   "dependencies": {
