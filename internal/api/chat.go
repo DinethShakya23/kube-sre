@@ -52,12 +52,19 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request, role string) {
 	}
 	// X-Session-ID ties the request to a conversation, which is what enables approval resume.
 	session := r.Header.Get("X-Session-ID")
-	if session == "" {
+	public := role == publicRole
+	if session == "" || public && !publicSessionRe.MatchString(session) {
 		session = newID()
 	}
 	user := body.User
 	if user == "" {
 		user = "default"
+	}
+	agentRole := role
+	if public {
+		// The agent knows no public role: readonly is the tier that rejects every
+		// write before it runs, and visitors share one memory identity.
+		user, agentRole, body.AutoApprove = publicRole, "readonly", false
 	}
 	slog.Info("chat completions", "session", session, "user", user, "role", role, "msg", clipRunes(message, 80),
 		"request_id", RequestID(r.Context()))
@@ -65,10 +72,22 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request, role string) {
 		writeError(w, &HTTPError{422, "Only stream=true is supported"})
 		return
 	}
+	var release func()
+	if public {
+		var err error
+		if release, err = s.admitPublic(r, message); err != nil {
+			writeError(w, err)
+			return
+		}
+		defer release()
+	}
 	started := time.Now()
-	s.stream(w, r, agent.TurnRequest{
-		Message: message, SessionID: session, UserID: user, UserRole: role, AutoApprove: body.AutoApprove,
+	p, c := s.stream(w, r, agent.TurnRequest{
+		Message: message, SessionID: session, UserID: user, UserRole: agentRole, AutoApprove: body.AutoApprove,
 	}, started)
+	if public {
+		s.public.Record(p, c)
+	}
 }
 
 func sse(w http.ResponseWriter, payload any) {
@@ -149,7 +168,9 @@ func frame(id string, ev map[string]any) map[string]any {
 	return nil
 }
 
-func (s *Server) stream(w http.ResponseWriter, r *http.Request, req agent.TurnRequest, started time.Time) {
+// stream runs the turn and returns the tokens it used, counted even when the
+// client left early, because the model calls were made either way.
+func (s *Server) stream(w http.ResponseWriter, r *http.Request, req agent.TurnRequest, started time.Time) (promptTokens, completionTokens int) {
 	completion := "chatcmpl-" + strings.ReplaceAll(newID(), "-", "")[:12]
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -187,6 +208,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request, req agent.TurnRe
 	// state is saved cleanly.
 	cancel()
 	<-done
+	promptTokens, completionTokens, _ = meter.Snapshot()
 
 	if r.Context().Err() == nil {
 		// Usage goes out before the terminator so a client that stops at
@@ -208,4 +230,5 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request, req agent.TurnRe
 			DurationMS: float64(time.Since(started).Milliseconds()),
 		})
 	}
+	return promptTokens, completionTokens
 }

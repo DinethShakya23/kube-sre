@@ -30,6 +30,7 @@ usage:
   kube-sre service install|uninstall|status   run as a systemd user service
   kube-sre kind-setup                    create a local kind cluster
   kube-sre provenance [--tag vX.Y.Z]     how to verify a release
+  kube-sre admin-hash                    hash a password for the /admin sign in
   kube-sre replay ID [flags]             replay a recorded episode
   kube-sre digest [--hours N] [flags]    what happened while you were away
   kube-sre postmortem ID [flags]         grounded postmortem of an episode
@@ -77,6 +78,8 @@ func run(args []string) int {
 		return kindSetupCmd(args[1:])
 	case "provenance":
 		return provenanceCmd(args[1:])
+	case "admin-hash":
+		return adminHashCmd(args[1:])
 	case "replay":
 		return replay(args[1:])
 	case "digest":

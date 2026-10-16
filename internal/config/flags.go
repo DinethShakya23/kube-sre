@@ -61,8 +61,6 @@ var UnwiredExperimental = map[string]bool{
 	"KI_V5_OFFLINE_SHADOW_WEIGHT":      true,
 	"KI_V5_OTEL_SPANS_ENABLED":         true,
 	"KI_V5_RIGHTSIZING":                true,
-	"KI_V5_SPEND_IN_PRICE_PER_1K":      true,
-	"KI_V5_SPEND_OUT_PRICE_PER_1K":     true,
 	"KI_V5_STAGED_PROPAGATION":         true,
 	"KI_V5_STAGE_SIZE":                 true,
 	"KI_V5_STAGE_WINDOW_SECONDS":       true,

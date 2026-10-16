@@ -79,6 +79,16 @@ func Check(cfg *config.Config) error {
 	for _, w := range cfg.LLMWarnings() {
 		slog.Warn(w)
 	}
+	if cfg.AdminLoginEnabled() && !api.ValidHash(cfg.AdminPasswordHash) {
+		slog.Warn("ADMIN_PASSWORD_HASH is not a hash made by 'kube-sre admin-hash', so admin login will always fail")
+	}
+	if cfg.PublicDemo && (cfg.TurnstileSiteKey == "") != (cfg.TurnstileSecret == "") {
+		slog.Warn("only one of TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY is set, so the public demo runs without a human check")
+	}
+	if cfg.PublicDemo {
+		slog.Info("public demo on", "questions_per_hour", cfg.PublicQuestionsPerHour, "max_concurrent", cfg.PublicMaxConcurrent,
+			"daily_budget_usd", cfg.PublicDailyBudgetUSD, "human_check", cfg.TurnstileEnabled(), "admin_login", cfg.AdminLoginEnabled())
+	}
 	// Fail fast, before the port opens. An operator who set REQUIRE_AUTH asked for
 	// exactly one thing: that this server never serve an unauthenticated request.
 	if cfg.RequireAuth && cfg.OpenAccess() {

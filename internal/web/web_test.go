@@ -13,10 +13,33 @@ func serve(t *testing.T, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", Redirect)
-	mux.Handle("GET /ui/", Handler())
+	mux.Handle("GET /ui/", Handler(false))
+	mux.Handle("GET /admin", AdminPage())
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 	return rec
+}
+
+func TestAdminPageIsTheAppAndNeverCached(t *testing.T) {
+	rec := serve(t, "/admin")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `id="root"`) {
+		t.Fatalf("admin: %d", rec.Code)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("X-Frame-Options") != "DENY" {
+		t.Fatalf("headers: %v", rec.Header())
+	}
+}
+
+func TestTurnstileWidensTheCSPOnlyWhenOn(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler(true).ServeHTTP(rec, httptest.NewRequest("GET", "/ui/", nil))
+	on := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(on, "script-src 'self' https://challenges.cloudflare.com") || !strings.Contains(on, "frame-src https://challenges.cloudflare.com") {
+		t.Fatalf("csp with turnstile: %q", on)
+	}
+	if off := serve(t, "/ui/").Header().Get("Content-Security-Policy"); strings.Contains(off, "cloudflare") {
+		t.Fatalf("csp without turnstile: %q", off)
+	}
 }
 
 func TestRootRedirects(t *testing.T) {
@@ -28,7 +51,7 @@ func TestRootRedirects(t *testing.T) {
 
 func TestAssetsServed(t *testing.T) {
 	for path, want := range map[string]string{
-		"/ui/":            "text/html",
+		"/ui/":               "text/html",
 		"/ui/assets/app.js":  "javascript",
 		"/ui/assets/app.css": "text/css",
 		"/ui/favicon.svg":    "image/svg",

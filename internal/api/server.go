@@ -60,14 +60,23 @@ type Server struct {
 	// extra routes registered by subsystems: pattern -> handler, all authenticated.
 	routes map[string]http.HandlerFunc
 
+	// The public demo limits, the admin sessions and the sign in lockout.
+	public *publicGuard
+	admins *adminSessions
+	logins *loginGuard
+	// verifyHuman replaces the Turnstile call in tests.
+	verifyHuman func(r *http.Request, token string) (bool, error)
+
 	ready atomic.Bool
 }
 
 func NewServer(cfg *config.Config, ag *agent.Agent, em *events.Emitter, version string) *Server {
+	admins := newAdminSessions()
 	return &Server{
 		Cfg: cfg, Agent: ag, Emitter: em, Version: version,
-		Auth: &Authenticator{Cfg: cfg}, Limiter: NewLimiter(cfg),
+		Auth: &Authenticator{Cfg: cfg, Sessions: admins}, Limiter: NewLimiter(cfg),
 		Health: map[string]StatusFunc{}, routes: map[string]http.HandlerFunc{},
+		public: newPublicGuard(cfg), admins: admins, logins: newLoginGuard(cfg.AdminLoginMaxFails),
 	}
 }
 
@@ -90,12 +99,22 @@ func (s *Server) Handle(pattern string, h http.HandlerFunc) { s.routes[pattern] 
 // a route added tomorrow inherits the gate instead of needing to remember it.
 func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, role string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		role, err := s.Auth.Role(r)
+		role, via, err := s.Auth.Identify(r)
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		h(w, r, role)
+		// A cookie rides along on cross site requests, so cookie authenticated
+		// writes must prove they came from our own page.
+		if via == "cookie" && unsafeMethod(r.Method) && !csrfOK(r) {
+			writeError(w, &HTTPError{403, "Missing or cross-site request."})
+			return
+		}
+		if role == publicRole && !publicAllowed(r.Pattern) {
+			writeError(w, &HTTPError{403, "Not available in the public demo."})
+			return
+		}
+		h(w, withVia(r, via), role)
 	}
 }
 
@@ -108,7 +127,14 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /{$}", web.Redirect)
-	mux.Handle("GET /ui/", web.Handler())
+	mux.Handle("GET /ui/", web.Handler(s.turnstileOn()))
+	mux.Handle("GET /admin", web.AdminPage())
+	mux.Handle("GET /admin/", web.AdminPage())
+	// The demo's front door: answered before anyone has a role, so unauthenticated.
+	mux.HandleFunc("GET /v1/public/config", s.publicConfig)
+	mux.HandleFunc("POST /v1/public/verify", s.publicVerify)
+	mux.HandleFunc("POST /v1/admin/login", s.adminLogin)
+	mux.HandleFunc("POST /v1/admin/logout", s.adminLogout)
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	// Liveness and readiness must answer an unauthenticated kubelet, so they are

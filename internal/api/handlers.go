@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -45,7 +46,21 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) whoami(w http.ResponseWriter, r *http.Request, role string) {
 	// The role of the caller's own key, never another caller's. A client cannot
 	// infer its privileges from a key prefix, which is only a naming convention.
-	writeJSON(w, http.StatusOK, map[string]any{"role": role})
+	writeJSON(w, http.StatusOK, map[string]any{"role": role, "session": viaOf(r)})
+}
+
+const viaKey ctxKey = 2
+
+func withVia(r *http.Request, via string) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), viaKey, via))
+}
+
+// viaOf says how the caller signed in: key, cookie or none.
+func viaOf(r *http.Request) string {
+	if v, ok := r.Context().Value(viaKey).(string); ok {
+		return v
+	}
+	return "none"
 }
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)

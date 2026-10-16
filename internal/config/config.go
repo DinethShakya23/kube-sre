@@ -202,6 +202,21 @@ type Config struct {
 	RateLimitBurst      int
 	RateLimitMaxTracked int
 	RateLimitProxyHops  int
+
+	// PublicDemo serves callers with no key as a read only "public" role, within limits.
+	PublicDemo             bool
+	PublicDailyBudgetUSD   float64
+	PublicQuestionsPerHour int
+	PublicMaxQuestionChars int
+	PublicMaxConcurrent    int
+	TurnstileSiteKey       string
+	TurnstileSecret        string
+
+	// Admin sign in at /admin, for a public demo where no one should hold a key.
+	AdminUsername      string
+	AdminPasswordHash  string
+	AdminSessionHours  int
+	AdminLoginMaxFails int
 }
 
 var alwaysBlocked = []string{"secret", "secrets", "serviceaccount", "serviceaccounts"}
@@ -445,6 +460,19 @@ func Load(getenv func(string) string) *Config {
 		RateLimitBurst:      anyInt("RATE_LIMIT_BURST", 30),
 		RateLimitMaxTracked: anyInt("RATE_LIMIT_MAX_TRACKED", 10000),
 		RateLimitProxyHops:  anyInt("RATE_LIMIT_TRUSTED_PROXY_HOPS", 0),
+
+		PublicDemo:             boolean("PUBLIC_DEMO", false),
+		PublicDailyBudgetUSD:   float("PUBLIC_DEMO_DAILY_BUDGET_USD", 5),
+		PublicQuestionsPerHour: num("PUBLIC_DEMO_QUESTIONS_PER_HOUR", 20),
+		PublicMaxQuestionChars: num("PUBLIC_DEMO_MAX_QUESTION_CHARS", 500),
+		PublicMaxConcurrent:    num("PUBLIC_DEMO_MAX_CONCURRENT", 4),
+		TurnstileSiteKey:       str("TURNSTILE_SITE_KEY", ""),
+		TurnstileSecret:        str("TURNSTILE_SECRET_KEY", ""),
+
+		AdminUsername:      str("ADMIN_USERNAME", ""),
+		AdminPasswordHash:  str("ADMIN_PASSWORD_HASH", ""),
+		AdminSessionHours:  num("ADMIN_SESSION_HOURS", 8),
+		AdminLoginMaxFails: num("ADMIN_LOGIN_MAX_FAILS", 5),
 	}
 
 	nsDefault := "kube-sre,monitoring,kube-system,kube-public,kube-node-lease,ingress-nginx,cert-manager"
@@ -613,9 +641,20 @@ func (c *Config) DSN() string {
 }
 
 // OpenAccess reports whether no auth is configured at all, so every caller is
-// treated as admin.
+// treated as admin. A public demo is never open: keyless callers are "public".
 func (c *Config) OpenAccess() bool {
-	return len(c.SuperadminKeys)+len(c.AdminKeys)+len(c.OperatorKeys)+len(c.ReadonlyKeys) == 0 && c.DemoKeySecret == ""
+	return len(c.SuperadminKeys)+len(c.AdminKeys)+len(c.OperatorKeys)+len(c.ReadonlyKeys) == 0 && c.DemoKeySecret == "" &&
+		!c.PublicDemo && !c.AdminLoginEnabled()
+}
+
+// AdminLoginEnabled reports whether /admin sign in is configured.
+func (c *Config) AdminLoginEnabled() bool {
+	return c.AdminUsername != "" && c.AdminPasswordHash != ""
+}
+
+// TurnstileEnabled reports whether public callers must pass a human check.
+func (c *Config) TurnstileEnabled() bool {
+	return c.PublicDemo && c.TurnstileSiteKey != "" && c.TurnstileSecret != ""
 }
 
 // Warnings lists guard settings that can never match anything.

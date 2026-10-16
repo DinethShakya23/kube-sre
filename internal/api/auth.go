@@ -95,6 +95,8 @@ func matches(token string, keys []string) bool {
 type Authenticator struct {
 	Cfg *config.Config
 	Now func() time.Time
+	// Sessions are the live /admin sign ins.
+	Sessions *adminSessions
 }
 
 func (a *Authenticator) now() time.Time {
@@ -104,8 +106,39 @@ func (a *Authenticator) now() time.Time {
 	return time.Now()
 }
 
-// Role returns superadmin, admin, operator or readonly, or an HTTPError with 401.
+// Role returns superadmin, admin, operator, readonly or public, or an HTTPError with 401.
 func (a *Authenticator) Role(r *http.Request) (string, error) {
+	role, _, err := a.Identify(r)
+	return role, err
+}
+
+// viaCookie reports whether the request carries a live ks_admin session.
+func (a *Authenticator) viaCookie(r *http.Request) bool {
+	if a.Sessions == nil || !a.Cfg.AdminLoginEnabled() {
+		return false
+	}
+	c, err := r.Cookie(adminCookie)
+	return err == nil && a.Sessions.valid(c.Value)
+}
+
+// Identify returns the role and how it was established: key, cookie or none. A bad
+// bearer token is a 401 even in a public demo, never a quiet downgrade to public.
+func (a *Authenticator) Identify(r *http.Request) (role, via string, err error) {
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		role, err := a.keyRole(r)
+		return role, "key", err
+	}
+	if a.viaCookie(r) {
+		return "admin", "cookie", nil
+	}
+	if a.Cfg.PublicDemo {
+		return publicRole, "none", nil
+	}
+	role, err = a.keyRole(r)
+	return role, "none", err
+}
+
+func (a *Authenticator) keyRole(r *http.Request) (string, error) {
 	c := a.Cfg
 	if c.OpenAccess() {
 		// Fail open, deliberately, for local development: a first run with no keys
