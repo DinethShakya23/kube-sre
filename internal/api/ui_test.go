@@ -16,8 +16,8 @@ func TestUIServedWithoutKeyButDataStillNeedsOne(t *testing.T) {
 	if resp.Header.Get("Content-Security-Policy") == "" {
 		t.Fatal("no CSP on the UI")
 	}
-	if resp, _ := r.do(t, "GET", "/ui/app.js", "", nil); resp.StatusCode != 200 {
-		t.Fatalf("app.js: %d", resp.StatusCode)
+	if resp, _ := r.do(t, "GET", "/ui/assets/app.js", "", nil); resp.StatusCode != 200 {
+		t.Fatalf("assets/app.js: %d", resp.StatusCode)
 	}
 
 	for _, p := range []string{"/v1/findings", "/v1/digest", "/v1/preferences", "/v1/auth/whoami"} {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -28,10 +29,9 @@ func TestRootRedirects(t *testing.T) {
 func TestAssetsServed(t *testing.T) {
 	for path, want := range map[string]string{
 		"/ui/":            "text/html",
-		"/ui/app.js":      "javascript",
-		"/ui/md.js":       "javascript",
-		"/ui/app.css":     "text/css",
-		"/ui/favicon.svg": "image/svg",
+		"/ui/assets/app.js":  "javascript",
+		"/ui/assets/app.css": "text/css",
+		"/ui/favicon.svg":    "image/svg",
 	} {
 		rec := serve(t, path)
 		if rec.Code != 200 {
@@ -65,9 +65,28 @@ func TestPageHasNoInlineCode(t *testing.T) {
 	if strings.Contains(body, "onclick=") || strings.Contains(body, "<style") {
 		t.Fatal("inline code would be blocked by the CSP")
 	}
-	for _, id := range []string{"thread", "composer", "findTable", "digestBody", "reportBody", "statusBody", "detList", "prefList", "keyDialog"} {
-		if !strings.Contains(body, `id="`+id+`"`) {
-			t.Fatalf("missing #%s", id)
+	if !strings.Contains(body, `id="root"`) {
+		t.Fatal("missing the #root the app mounts on")
+	}
+	// Every script is a module loaded by src; a <script> with a body would be blocked.
+	for _, m := range regexp.MustCompile(`<script[^>]*>([^<]*)</script>`).FindAllStringSubmatch(body, -1) {
+		if strings.TrimSpace(m[1]) != "" {
+			t.Fatalf("inline script: %q", m[0])
+		}
+	}
+}
+
+// The page is built in ui/ and committed. An index.html pointing at a file that
+// was not embedded would serve a blank page.
+func TestIndexReferencesEmbeddedFiles(t *testing.T) {
+	body := serve(t, "/ui/").Body.String()
+	refs := regexp.MustCompile(`(?:src|href)="(/ui/[^"]+)"`).FindAllStringSubmatch(body, -1)
+	if len(refs) < 3 {
+		t.Fatalf("expected the script, stylesheet and icon, got %v", refs)
+	}
+	for _, r := range refs {
+		if rec := serve(t, r[1]); rec.Code != 200 {
+			t.Fatalf("%s: %d", r[1], rec.Code)
 		}
 	}
 }
@@ -77,9 +96,8 @@ func TestScripts(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed")
 	}
-	for _, args := range [][]string{{"--check", "static/app.js"}, {"--check", "static/md.js"}, {"md_check.js"}} {
-		if out, err := exec.Command(node, args...).CombinedOutput(); err != nil {
-			t.Fatalf("node %v: %v\n%s", args, err, out)
-		}
+	// The markdown renderer feeds dangerouslySetInnerHTML, so its XSS cases run here too.
+	if out, err := exec.Command(node, "../../ui/src/lib/md_check.mjs").CombinedOutput(); err != nil {
+		t.Fatalf("md_check: %v\n%s", err, out)
 	}
 }
