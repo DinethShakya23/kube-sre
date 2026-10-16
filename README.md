@@ -101,6 +101,12 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `AZURE_OPENAI_*` | Azure endpoint, key, deployments |
 | `KUBESRE_ADMIN_KEYS` and `_OPERATOR_`, `_READONLY_`, `_SUPERADMIN_` | comma separated API keys |
 | `REQUIRE_AUTH` | refuse to start with no keys configured |
+| `PUBLIC_DEMO` | callers with no key get a read only `public` role: chat, findings, digest and postmortems, never a write |
+| `PUBLIC_DEMO_QUESTIONS_PER_HOUR`, `PUBLIC_DEMO_MAX_QUESTION_CHARS`, `PUBLIC_DEMO_MAX_CONCURRENT` | per visitor and overall limits (20, 500, 4) |
+| `PUBLIC_DEMO_DAILY_BUDGET_USD` | model spend shared by all visitors, reset at 00:00 UTC (5) |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | ask public visitors for a Cloudflare Turnstile check before their first question |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` | password sign in at `/admin`; make the hash with `kube-sre admin-hash` |
+| `ADMIN_SESSION_HOURS`, `ADMIN_LOGIN_MAX_FAILS` | how long a sign in lasts (8), and failures before a 15 minute lockout (5) |
 | `PROMETHEUS_URL`, `LOKI_URL` | metric and log sources |
 | `KUBECTL_BLOCKED_NAMESPACES` | namespaces the agent never touches |
 | `NL_DETECTOR_AUTHORING_ENABLED`, `DB_DETECTOR_REFRESH_SECONDS` | plain English detectors: staged as shadow, promoted by a human, reloaded without a restart |
@@ -115,7 +121,8 @@ Settings come from environment variables, then `./.env`, then `~/.kube-sre/.env`
 | `KI_V5_CHANGE_WATCHDOG`, `KI_V5_PREDICTIVE_FUSION`, `KI_V5_PREDICTIVE_PRECAPTURE` | a read-only look at what a change did, at a predicted failure, and recorders armed before a predicted death |
 | `MEMORY_BITEMPORAL_ENABLED`, `MEMORY_KG_PPR`, `MEMORY_WRITE_RECONCILE` | graph event time, blast radius ranking, write reconciliation |
 
-With no keys configured every caller is `admin`, which is meant for local use.
+With no keys configured every caller is `admin`, which is meant for local use. A public demo is never
+open: there, a caller with no key is `public`, and admins sign in at `/admin` or use a key.
 
 ## API
 
@@ -126,6 +133,8 @@ conversation; when the reply asks for approval, answer `yes` or `no` in the same
 Also: `GET /healthz`, `/readyz`, `/metrics`, `/v1/namespaces`, `/v1/auth/whoami`,
 `/v1/events/replay/{session}` (this process only), `/v1/episodes/{id}/replay` (durable, chain
 verified), `/v1/episodes/{id}/postmortem`, `/v1/digest`, `/v1/detectors` (author, list, promote, demote, shadow findings), `/v1/findings`, and `/v1/preferences` (GET; PUT and DELETE need `operator`).
+Without a key: `GET /v1/public/config`, `POST /v1/public/verify` (Turnstile), and `POST /v1/admin/login` and
+`/v1/admin/logout`, which need the `X-KubeSre-CSRF: 1` header, as does any write made with the sign in cookie.
 
 ## Tests
 
