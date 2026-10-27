@@ -1,28 +1,28 @@
 # Deploying kube-sre
 
-kube-sre runs on the shared Contabo VPS at `45.130.104.143`, next to PaperLK, Tikri and Plotter.
-It is set up to touch nothing they use: no Caddy, no open ports, no firewall change, no Docker
-or Kubernetes on that box. Read the server's runbook first:
-`paperhub-lk/VPS-DEPLOYMENT-ALL-WEBSITES.md` (especially §9).
+kube-sre and the demo cluster it watches both run on the shared Contabo VPS at `45.130.104.143`,
+next to PaperLK, Tikri and Plotter. They are set up to stay out of their way: no Caddy block, no
+open ports, no firewall rule changes, no Docker, and a rootless cluster in its own network
+namespace. Read the server's runbook first: `paperhub-lk/VPS-DEPLOYMENT-ALL-WEBSITES.md` (§9).
 
-Moved here from `161.97.115.14` on 2026-10-27.
+Moved here from `161.97.115.14` on 2026-10-27; the demo cluster followed the same day.
 
 ## How it fits together
 
 ```
 visitor ── https://kubesre.3wayhandshake.nl ── Cloudflare ── tunnel (outbound only)
                                                                     │
-  shared VPS 45.130.104.143, user kubesre                           │
+  shared VPS 45.130.104.143                                         │
+   user kubesre                                                     │
     kube-sre-tunnel   cloudflared, connects out to Cloudflare  ◀────┘
-    kube-sre          127.0.0.1:8765   /ui /v1 /admin /healthz /readyz /metrics
+    kube-sre          127.0.0.1:8765   /ui /v1 /admin /healthz /readyz
     kube-sre-site     127.0.0.1:9000   the marketing site (everything else)
-          │
-          │ Tailscale only (kubectl, Prometheus, Loki)
+          │ kubectl to 127.0.0.1:6443, Prometheus 127.0.0.1:30090, Loki 127.0.0.1:30100
           ▼
-  cluster VPS 161.97.115.14 (100.73.155.56 on Tailscale)
-    k3d "demo" cluster: the broken shop apps, Prometheus, Loki
-    kube-sre-ts-api.socket      100.73.155.56:6550 -> 127.0.0.1:6550 (Kubernetes API)
-    kube-sre-ts-ingress.socket  100.73.155.56:8080 -> 127.0.0.1:8080 (Prometheus, Loki)
+   user kubesre-cluster (rootless k3s, its own user and network namespace)
+    kubesre-cluster                 k3s v1.35.5+k3s1: the broken shop apps, Prometheus, Loki, Alloy
+    kubesre-cluster-pf-prometheus   kubectl port-forward on 127.0.0.1:30090 only
+    kubesre-cluster-pf-loki         kubectl port-forward on 127.0.0.1:30100 only
 ```
 
 The hostname routes (which path goes to 8765 and which to 9000) live in the Cloudflare
@@ -38,16 +38,68 @@ Everything belongs to the `kubesre` user. Home is `750`; secret folders are `700
 | `/home/kubesre/bin/` | `kube-sre`, `kubectl` (v1.35.5, matches the cluster), `cloudflared` |
 | `/home/kubesre/.kube-sre/.env` | settings and secrets: model API key, admin login hash, public demo limits |
 | `/home/kubesre/.kube-sre/kube-sre.db` | SQLite: flight recorder, audit chains, memory, findings history |
-| `/home/kubesre/.kube-sre/kube-sre.kubeconfig` | read only cluster credentials, pointed at `https://100.73.155.56:6550` with `tls-server-name: localhost` |
+| `/home/kubesre/.kube-sre/kube-sre.kubeconfig` | read only credentials (the `sre-agent/kube-sre` ServiceAccount token) for `https://127.0.0.1:6443` |
 | `/home/kubesre/.cloudflared/token` | the tunnel token |
-| `/home/kubesre/etc/hosts` | a private hosts file, mounted over `/etc/hosts` for kube-sre only, so `prometheus.demo.test` and `loki.demo.test` reach the cluster VPS. The server's real `/etc/hosts` is untouched. |
 | `/home/kubesre/site/` | the built marketing site (`ui/site-dist`) |
+
+`.env` points kube-sre at `PROMETHEUS_URL=http://127.0.0.1:30090` and `LOKI_URL=http://127.0.0.1:30100`.
 
 Units in `/etc/systemd/system/`: `kube-sre.service`, `kube-sre-site.service`, `kube-sre-tunnel.service`.
 
 `CLUSTER_ID=kube-sre@demo:a64129c2` is pinned in `.env`. kube-sre derives the id from the API
-server address, which changed with the move to Tailscale; pinning it keeps memory (past
-incidents, learned rules, the knowledge graph) attached to the same cluster.
+server address, which changed in each move; pinning it keeps memory (past incidents, learned
+rules, the knowledge graph) attached to the same demo cluster.
+
+## The demo cluster
+
+Rootless k3s, owned by the `kubesre-cluster` user (home `750`, no login shell). It runs as that
+user, never as root, inside its own user and network namespace, so it adds no network
+interfaces and no firewall rules to the server.
+
+| Path | What |
+|---|---|
+| `/home/kubesre-cluster/bin/` | `k3s` v1.35.5+k3s1 (with `kubectl`, `crictl`, `ctr` links) and `helm` v3.19.0 |
+| `/home/kubesre-cluster/.config/k3s/config.yaml` | Traefik and servicelb disabled, so nothing binds 80/443 |
+| `/home/kubesre-cluster/.kube/k3s.yaml` | the admin kubeconfig (stays with this user) |
+| `/home/kubesre-cluster/demo/` | `shop.yaml`, `rbac.yaml` and the Prometheus, Loki and Alloy values |
+
+What runs in it: the `shop` apps (one healthy, four broken on purpose, with a quota), Prometheus
+29.31.1 (no node-exporter, which needs host access), Loki 7.3.0 and Alloy 1.12.1 in `monitoring`,
+and the `sre-agent/kube-sre` ServiceAccount bound to `view` plus `kube-sre-extra-read`. It can
+list, get and watch, and cannot read secrets, create, delete, patch or exec.
+
+To work on it, as root on the server:
+
+```bash
+K="sudo -u kubesre-cluster -H env KUBECONFIG=/home/kubesre-cluster/.kube/k3s.yaml PATH=/home/kubesre-cluster/bin:/usr/bin:/bin"
+$K kubectl get pods -A
+$K kubectl apply -f /home/kubesre-cluster/demo/shop.yaml
+$K helm list -A
+```
+
+### What it needed from the server
+
+These are the only server wide changes, each small and easy to undo:
+
+| Change | Why | Undo |
+|---|---|---|
+| packages `uidmap`, `slirp4netns` | user namespaces and the cluster's private network | `apt-get remove uidmap slirp4netns` |
+| `/etc/apparmor.d/kubesre-cluster` | lets only binaries under `/home/kubesre-cluster/{bin,.rancher}` create user namespaces; Ubuntu blocks that for everything else | `apparmor_parser -R kubesre-cluster && rm /etc/apparmor.d/kubesre-cluster` |
+| `/etc/sysctl.d/90-kubesre-cluster.conf` | `net.ipv4.ip_forward = 1`; k3s refuses to start without it. ufw keeps routed traffic denied, so nothing is forwarded | remove the file, `sysctl -w net.ipv4.ip_forward=0` |
+
+### Its limits
+
+`kubesre-cluster.service` holds the whole cluster, every pod included (`Delegate=yes`):
+`MemoryHigh=2560M`, `MemoryMax=3G`, `CPUQuota=150%` (1.5 of 4 cores), `CPUWeight=30`, `IOWeight=30`,
+`OOMScoreAdjust=600`, and the other apps' homes, `/home/kubesre` and `/root` made inaccessible.
+It sits near its soft memory limit, mostly cached image layers; PaperLK and Tikri stay
+unaffected. The k3s API on port 6443 listens on the host but ufw blocks it from the internet.
+
+The two `kubesre-cluster-pf-*` units bind `127.0.0.1` only and restart on their own if a pod
+moves. They are part of `kubesre-cluster.service`, so stopping it stops them too.
+
+To remove the cluster completely: stop and disable the three `kubesre-cluster*` units, delete
+their unit files, `userdel -r kubesre-cluster`, then undo the three changes above.
 
 ## Isolation
 
@@ -99,16 +151,15 @@ sed 's/\r$//' deploy/remote-deploy.sh | ssh root@45.130.104.143 'install -o root
 
 ### By hand
 
-Neither server has Go. Build in Docker on the cluster VPS, then stream the binary across:
+Prefer re-running the workflow from the Actions tab. The server has neither Go nor Docker, and
+should not get them, so a manual build happens on any machine with Go 1.27, then streams across:
 
 ```bash
-# 1. build (on the cluster VPS, from the pushed commit)
-ssh kube-demo 'rm -rf /tmp/ks-build && git clone -q --depth 1 https://github.com/DinethShakya23/kube-sre.git /tmp/ks-build/src &&
-  docker run --rm -v /tmp/ks-build/src:/src -v ks-gomod:/go/pkg/mod -w /src -e CGO_ENABLED=0 golang:1.27 \
-    sh -c "git config --global --add safe.directory /src && go build -trimpath -o /src/kube-sre ./cmd/kube-sre"'
+# 1. build (anywhere with Go, from the pushed commit)
+CGO_ENABLED=0 go build -trimpath -o kube-sre ./cmd/kube-sre
 
 # 2. install with a backup, under the shared deploy lock, and restart only kube-sre
-ssh kube-demo 'cat /tmp/ks-build/src/kube-sre' | ssh root@45.130.104.143 'flock /var/lock/droplet-deploy.lock sh -c "
+cat kube-sre | ssh root@45.130.104.143 'flock /var/lock/droplet-deploy.lock sh -c "
   cp -a /home/kubesre/bin/kube-sre /home/kubesre/bin/kube-sre.previous &&
   install -o kubesre -g kubesre -m 750 /dev/stdin /home/kubesre/bin/kube-sre.new &&
   mv -f /home/kubesre/bin/kube-sre.new /home/kubesre/bin/kube-sre &&
@@ -130,18 +181,20 @@ digest reads the database and is not affected.
 
 ```bash
 ssh root@45.130.104.143 'for u in https://paperlk.app https://tikri.tech https://diagram.tikri.tech; do
-  echo "$(curl -s -o /dev/null -w %{http_code} $u) $u"; done; systemctl is-active caddy paperhub tikri-api tikri-web'
+  echo "$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" $u) $u"; done
+  systemctl is-active caddy paperhub tikri-api tikri-web kubesre-cluster kube-sre
+  echo "cluster memory: $(( $(cat /sys/fs/cgroup/system.slice/kubesre-cluster.service/memory.current)/1048576 ))M"'
 ```
 
-## Moving back, or to another server
+## Moving to another server
 
 Copy `/home/kubesre/` (with an SQLite online backup of the database, never a plain copy of a
 running one), recreate the three units, start the new tunnel, then stop the old one. Both
 tunnels can run at once for a moment; Cloudflare splits traffic between them.
 
-The pre-move setup on `161.97.115.14` (`kube-sre`, `cloudflared`, `kube-sre-site` units) is
-disabled but still installed, as a fallback: `systemctl enable --now kube-sre kube-sre-site cloudflared`
-there, then stop `kube-sre-tunnel` on the shared VPS.
+The demo cluster is disposable: recreate it from `/home/kubesre-cluster/demo/` (also kept in
+`~/ks-old/demo-setup` on the laptop the move was done from), mint a new kubeconfig for the
+`sre-agent/kube-sre` ServiceAccount, and keep `CLUSTER_ID` pinned.
 
 ## Notes
 
