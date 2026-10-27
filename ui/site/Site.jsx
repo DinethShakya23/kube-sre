@@ -463,9 +463,6 @@ function Footer() {
     <footer className="s-footer">
       <div className="s-footer-in">
         <span>kube-sre, a Go re-implementation of an SRE agent for Kubernetes.</span>
-        <span>
-          Design lineage: <b>KubeIntellect</b> by M. Seyedkazemi Ardebili.
-        </span>
         <a href={GITHUB} className="s-icon-link">
           <GitHubIcon /> GitHub
         </a>
