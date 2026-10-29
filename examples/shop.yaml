@@ -1,0 +1,88 @@
+# A small shop for trying kube-sre: one healthy app and four broken on purpose.
+#   checkout     exits on start (connection refused)        -> CrashLoopBackOff
+#   payments     image that does not exist                  -> ImagePullBackOff
+#   search       readiness probe on a port nothing serves   -> never Ready
+#   recommender  allocates until it hits its memory limit    -> OOMKilled
+# kubectl apply -f examples/shop.yaml, then ask kube-sre what is wrong.
+apiVersion: v1
+kind: Namespace
+metadata: {name: shop}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: cap, namespace: shop}
+spec:
+  hard: {pods: "10", limits.memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: frontend, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: frontend}}
+  template:
+    metadata: {labels: {app: frontend}}
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        resources: {requests: {cpu: 5m, memory: 8Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: checkout, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: checkout}}
+  template:
+    metadata: {labels: {app: checkout}}
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh","-c","echo connecting to db.shop.svc:5432; echo FATAL connection refused >&2; exit 1"]
+        resources: {requests: {cpu: 5m, memory: 8Mi}, limits: {memory: 32Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: payments, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: payments}}
+  template:
+    metadata: {labels: {app: payments}}
+    spec:
+      containers:
+      - name: app
+        image: registry.example.invalid/payments:v9
+        resources: {requests: {cpu: 5m, memory: 8Mi}, limits: {memory: 32Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: search, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: search}}
+  template:
+    metadata: {labels: {app: search}}
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 5}
+        resources: {requests: {cpu: 5m, memory: 8Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: recommender, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: recommender}}
+  template:
+    metadata: {labels: {app: recommender}}
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh","-c","a=x; while true; do a=\"$a$a\"; done"]
+        resources: {requests: {cpu: 5m, memory: 8Mi}, limits: {memory: 32Mi}}

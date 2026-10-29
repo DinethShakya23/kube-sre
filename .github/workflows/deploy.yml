@@ -1,6 +1,6 @@
 name: Deploy
 
-# Tests, builds the binary and both web builds, then hands the release to the shared VPS,
+# Tests, builds the binary and both web builds, then hands the release to the server,
 # where deploy/remote-deploy.sh installs it and rolls back if it does not come up healthy.
 on:
   push:

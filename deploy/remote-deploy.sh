@@ -1,7 +1,7 @@
 #!/bin/bash
 # The forced command of the CD key, run as kubesre: reads a release tarball on stdin,
 # installs it, restarts kube-sre, and rolls back if it does not come up healthy.
-# Installed root owned at /home/kubesre/deploy/deploy.sh; see DEPLOY.md.
+# Installed root owned at /home/kubesre/deploy/deploy.sh; see DEMO.md.
 set -euo pipefail
 
 H=/home/kubesre

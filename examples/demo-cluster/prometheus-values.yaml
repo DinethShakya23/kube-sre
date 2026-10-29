@@ -1,0 +1,19 @@
+# Prometheus for the kube-sre demo cluster (prometheus-community/prometheus 29.31.1).
+# No node-exporter: it needs host access, which a rootless cluster does not give.
+server:
+  retention: 24h
+  persistentVolume:
+    enabled: false
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+kube-state-metrics:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 128Mi}
