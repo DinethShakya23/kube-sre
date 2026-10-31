@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import Aurora from '../src/components/reactbits/Aurora/Aurora.jsx';
 import BlurText from '../src/components/reactbits/BlurText/BlurText.jsx';
-import CountUp from '../src/components/reactbits/CountUp/CountUp.jsx';
 import FadeContent from '../src/components/reactbits/FadeContent/FadeContent.jsx';
 import GradientText from '../src/components/reactbits/GradientText/GradientText.jsx';
-import ShinyText from '../src/components/reactbits/ShinyText/ShinyText.jsx';
 import SpotlightCard from '../src/components/reactbits/SpotlightCard/SpotlightCard.jsx';
 import StarBorder from '../src/components/reactbits/StarBorder/StarBorder.jsx';
 import TextType from '../src/components/reactbits/TextType/TextType.jsx';
 import {
   ArrowIcon,
   BookIcon,
+  ChatIcon,
   CheckIcon,
   CopyIcon,
   EyeIcon,
@@ -19,6 +18,7 @@ import {
   LockIcon,
   Logo,
   PlayIcon,
+  PulseIcon,
   RadarIcon,
   SearchIcon,
   ShieldIcon,
@@ -26,14 +26,48 @@ import {
 } from '../src/components/Icons.jsx';
 
 const GITHUB = 'https://github.com/DinethShakya23/kube-sre';
-const DEMO = '/ui/';
+const SETUP_GUIDE = GITHUB + '/blob/main/SETUP.md';
+const TRY_IT = '/ui/';
 
 const NAV = [
+  ['Why kube-sre', '#why'],
   ['Features', '#features'],
   ['How it works', '#how'],
   ['Safety', '#safety'],
-  ['Self-host', '#self-host'],
-  ['Demo', '#demo']
+  ['Get started', '#get-started']
+];
+
+const BENEFITS = [
+  {
+    icon: ChatIcon,
+    title: 'Answers in minutes, not an hour of kubectl',
+    body: 'Describe the symptom in plain English. kube-sre runs the reads you would have run, side by side and comes back with the cause.'
+  },
+  {
+    icon: EyeIcon,
+    title: 'Evidence you can check',
+    body: 'Every answer cites the commands, logs and metrics it used, so you can trust it or push back in seconds.'
+  },
+  {
+    icon: RadarIcon,
+    title: 'Catches problems before you ask',
+    body: 'Built in detectors spot crash loops, bad images and memory kills on their own, at no model cost. A digest catches you up after time away.'
+  },
+  {
+    icon: BookIcon,
+    title: 'Gets better with your cluster',
+    body: 'It remembers past incidents and what fixed them, so a problem you have seen before is solved faster the next time.'
+  },
+  {
+    icon: SlidersIcon,
+    title: 'Works with what you already run',
+    body: 'kubectl, Prometheus and Loki, with OpenAI, Azure OpenAI, Qwen or any OpenAI compatible model. Nothing to install inside your cluster.'
+  },
+  {
+    icon: PulseIcon,
+    title: 'Up and running in minutes',
+    body: 'One binary with the web UI built in and SQLite by default. Point it at your cluster, add a model key and start asking.'
+  }
 ];
 
 const FEATURES = [
@@ -55,7 +89,7 @@ const FEATURES = [
     points: [
       "Rule based detectors that cost nothing: no AI call just to notice a crash loop",
       'A live watch over pods and events',
-      'A feed of every finding, and when it fired',
+      'A feed of every finding and when it fired',
       'Describe a failure in plain English and it becomes a detector that watches quietly first'
     ]
   },
@@ -77,14 +111,13 @@ const FEATURES = [
     points: [
       'SQLite by default, or Postgres when you need more than one box',
       'A CLI for chat, digests, postmortems and replays, plus a systemd service install',
-      'API keys, expiring demo keys, or an admin login with a hashed password',
-      'An optional public demo mode with spend caps and per visitor limits'
+      'API keys per role, or a password sign in for admins'
     ]
   }
 ];
 
 const STEPS = [
-  ['A detector fires', 'Rules that cost nothing watch the pod and event streams. One matches: recommender in shop was OOMKilled.'],
+  ['A detector fires', 'Rules that cost nothing watch the pod and event streams. One matches: a pod in production was killed for running out of memory.'],
   [
     'The playbook loads',
     "Its steps and the evidence to expect go into the model's context: describe the pod, check memory over 30 minutes, read the previous container's logs."
@@ -97,7 +130,7 @@ const SAFETY = [
   {
     icon: LockIcon,
     title: 'Read only unless you say otherwise',
-    body: 'In this demo, the identity kube-sre uses can list, get and watch, and nothing else. Kubernetes itself refuses any write, not just a setting.'
+    body: 'kube-sre never changes anything without your approval. Give it a read only identity and Kubernetes itself refuses every write, not just a setting.'
   },
   {
     icon: ShieldIcon,
@@ -107,7 +140,7 @@ const SAFETY = [
   {
     icon: GaugeIcon,
     title: 'Brakes that fail closed',
-    body: 'A kill switch, a change freeze and a spend cap sit in front of any automatic change, and a bad track record takes away auto fix rights on its own.'
+    body: 'A kill switch, a change freeze and a spend cap sit in front of any automatic change. A bad track record takes away auto fix rights on its own.'
   },
   {
     icon: EyeIcon,
@@ -117,11 +150,11 @@ const SAFETY = [
 ];
 
 const QUICKSTART = [
-  ['kube-sre kind-setup', "a local cluster, if you don't have one"],
-  ['kubectl apply -f examples/shop.yaml', 'one healthy app, four broken ones'],
-  ['export OPENAI_API_KEY=sk-...', 'any OpenAI compatible key'],
-  ['kube-sre init', 'writes ~/.kube-sre/.env and prints an admin key once'],
-  ['kube-sre serve', 'then open http://localhost:8000/']
+  ['git clone https://github.com/DinethShakya23/kube-sre', 'get the source'],
+  ['cd kube-sre', ''],
+  ['go build -o kube-sre ./cmd/kube-sre', 'one binary, web UI included'],
+  ['./kube-sre init', 'pick your model provider; prints an admin key'],
+  ['./kube-sre serve', 'then open http://localhost:8000/ and ask away']
 ];
 
 function Section({ id, className = '', children }) {
@@ -180,8 +213,8 @@ function Header() {
           <a className="s-icon-link" href={GITHUB} aria-label="kube-sre on GitHub">
             <GitHubIcon />
           </a>
-          <a className="s-btn" href={DEMO}>
-            Open the demo
+          <a className="s-btn" href="#get-started">
+            Get started
           </a>
         </div>
       </div>
@@ -243,23 +276,22 @@ function Hero() {
         <Aurora colorStops={['#3346ff', '#28c7b2', '#6a2cff']} amplitude={0.9} blend={0.55} speed={0.5} opacity={0.55} mouseInteraction={false} />
       </div>
       <div className="s-hero-in">
-        <span className="s-pill">
-          <span className="s-pill-dot" aria-hidden="true" />
-          <ShinyText text="Open source · Self-hosted · Read only by default" color="#9aa3ba" shineColor="#ffffff" speed={3} />
-        </span>
         <h1 className="s-title">
           <BlurText text="An AI SRE" className="s-title-line" delay={70} animateBy="words" direction="top" trigger="load" />
           <GradientText colors={['#8f9bff', '#4fe0cb', '#b18cff', '#8f9bff']} animationSpeed={8} className="s-title-grad">
             for Kubernetes
           </GradientText>
         </h1>
-        <p className="s-lede">Ask it what's wrong. It reads your cluster, shows you the evidence it found, and never changes anything without your okay.</p>
+        <p className="s-lede">
+          Ask what's wrong with your cluster in plain English. kube-sre investigates live, finds the root cause, shows you the evidence and suggests
+          the fix. Nothing changes without your okay.
+        </p>
         <div className="s-ctas">
-          <StarBorder as="a" href={DEMO} className="s-star" color="#7c8cff" trailColor="#3fd9c4" radius={12} duration={5} backgroundColor="#151a2e" textColor="#ffffff">
-            Try the live demo <ArrowIcon />
+          <StarBorder as="a" href="#get-started" className="s-star" color="#7c8cff" trailColor="#3fd9c4" radius={12} duration={5} backgroundColor="#151a2e" textColor="#ffffff">
+            Get started <ArrowIcon />
           </StarBorder>
-          <a className="s-btn ghost" href="#how">
-            See how it works
+          <a className="s-btn ghost" href={TRY_IT}>
+            Try it live
           </a>
         </div>
         <Terminal />
@@ -268,31 +300,33 @@ function Hero() {
   );
 }
 
-function Stats() {
-  const items = [
-    [27, 'built in playbooks'],
-    [20, 'detectors that never call the model'],
-    [1, 'binary, web UI included'],
-    [0, 'changes without your okay']
-  ];
+
+function Why() {
   return (
-    <div className="s-stats">
-      {items.map(([n, label]) => (
-        <div key={label} className="s-stat">
-          <span className="s-stat-n">
-            <CountUp to={n} duration={1.6} />
-          </span>
-          <span className="s-stat-l">{label}</span>
-        </div>
-      ))}
-    </div>
+    <Section id="why">
+      <Heading
+        title="Less digging, faster fixes"
+        lede="kube-sre does the first hour of an incident for you: the reads, the correlation and the evidence, so you can go straight to the decision."
+      />
+      <div className="s-grid3">
+        {BENEFITS.map(({ icon: Icon, title, body }) => (
+          <Card key={title}>
+            <span className="s-ico">
+              <Icon />
+            </span>
+            <h3>{title}</h3>
+            <p className="s-muted">{body}</p>
+          </Card>
+        ))}
+      </div>
+    </Section>
   );
 }
 
 function Features() {
   return (
-    <Section id="features">
-      <Heading title="What it actually does" lede="No autonomous magic. Just quick reads backed by evidence, and a record you can check." />
+    <Section id="features" className="s-band">
+      <Heading title="What it actually does" lede="No autonomous magic. Just quick reads backed by evidence and a record you can check." />
       <div className="s-grid2">
         {FEATURES.map(({ icon: Icon, title, lede, points }) => (
           <Card key={title}>
@@ -322,7 +356,7 @@ function Walkthrough() {
       <Heading
         kicker="Product walkthrough"
         title="See it in action"
-        lede="A real investigation from start to finish: the question, the reads it makes, the evidence it cites, and the approval prompt before anything changes."
+        lede="A real investigation from start to finish: the question, the reads it makes, the evidence it cites and the approval prompt before anything changes."
       />
       <div className="s-video">
         <PlayIcon />
@@ -351,7 +385,7 @@ function How() {
         <SlidersIcon />
         <p>
           <b>Autonomy is a dial, not a switch.</b> You set the level per namespace, from just watching, to looking into it and reporting back, to
-          proposing a fix. Even the highest level only acts on its own for failure types you explicitly allow. Never for a predicted failure, and never
+          proposing a fix. Even the highest level only acts on its own for failure types you explicitly allow. Never for a predicted failure and never
           past a kill switch, a change freeze or a spend cap.
         </p>
       </div>
@@ -383,7 +417,7 @@ function Safety() {
   );
 }
 
-function SelfHost() {
+function GetStarted() {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -395,20 +429,25 @@ function SelfHost() {
     }
   };
   return (
-    <Section id="self-host" className="s-band">
+    <Section id="get-started" className="s-band">
       <div className="s-split">
         <div>
-          <h2>Run it on your own cluster</h2>
+          <h2>Get started in minutes</h2>
           <p className="s-muted">
-            One Go binary with the web UI built in, and SQLite by default. Point it at a read only service account and it can't change anything, even
-            if it wanted to.
+            One Go binary with the web UI built in and SQLite by default. Point it at your cluster, add a model key and ask your first question.
+            Run it on a laptop, a server, or next to your cluster.
           </p>
           <p className="s-muted small">
-            You need Docker, <code>kubectl</code>, and an API key for any OpenAI compatible model.
+            You need Go 1.27 to build, <code>kubectl</code> access to your cluster and an API key for any OpenAI compatible model.
           </p>
-          <a className="s-btn ghost" href={GITHUB}>
-            <GitHubIcon /> View on GitHub
-          </a>
+          <div className="s-actions">
+            <a className="s-btn" href={SETUP_GUIDE}>
+              Read the setup guide
+            </a>
+            <a className="s-btn ghost" href={GITHUB}>
+              <GitHubIcon /> View on GitHub
+            </a>
+          </div>
         </div>
         <div className="s-code">
           <div className="s-code-bar">
@@ -423,7 +462,7 @@ function SelfHost() {
                 <span>
                   <span className="s-prompt">$</span> {cmd}
                 </span>
-                <span className="s-code-note"># {note}</span>
+                {note && <span className="s-code-note"># {note}</span>}
               </div>
             ))}
           </pre>
@@ -433,26 +472,29 @@ function SelfHost() {
   );
 }
 
-function Demo() {
+function Closing() {
   return (
-    <section id="demo" className="s-demo">
-      <div className="s-demo-bg" aria-hidden="true">
+    <section id="start" className="s-cta">
+      <div className="s-cta-bg" aria-hidden="true">
         <Aurora colorStops={['#28c7b2', '#3346ff', '#6a2cff']} amplitude={0.8} blend={0.6} speed={0.45} opacity={0.45} direction="bottom" mouseInteraction={false} />
       </div>
-      <FadeContent blur duration={0.8} threshold={0.15} className="s-wrap s-demo-in">
-        <h2>Try it before you install anything</h2>
+      <FadeContent blur duration={0.8} threshold={0.15} className="s-wrap s-cta-in">
+        <h2>
+          Spend your next incident
+          <br />
+          fixing, not digging
+        </h2>
         <p className="s-muted">
-          A hosted copy is open to everyone. It watches a small sandbox cluster with a handful of apps broken on purpose: a crash loop, a bad image, a
-          probe that never passes, and an out of memory kill. Ask it what's wrong with any of them. Nothing to install.
+          kube-sre is open source and runs on your own infrastructure. Your cluster data stays with you and every change still waits for a person.
         </p>
-        <StarBorder as="a" href={DEMO} className="s-star" color="#3fd9c4" trailColor="#7c8cff" radius={12} duration={5} backgroundColor="#151a2e" textColor="#ffffff">
-          Open the demo <ArrowIcon />
-        </StarBorder>
-        <ul className="s-limits">
-          <li>20 questions per visitor, per hour</li>
-          <li>One shared daily budget for the whole demo</li>
-          <li>Read only, so nothing you ask can change the cluster</li>
-        </ul>
+        <div className="s-actions center">
+          <StarBorder as="a" href={SETUP_GUIDE} className="s-star" color="#3fd9c4" trailColor="#7c8cff" radius={12} duration={5} backgroundColor="#151a2e" textColor="#ffffff">
+            Get started <ArrowIcon />
+          </StarBorder>
+          <a className="s-btn ghost" href={TRY_IT}>
+            Try it live
+          </a>
+        </div>
       </FadeContent>
     </section>
   );
@@ -476,13 +518,13 @@ export default function Site() {
       <Header />
       <main>
         <Hero />
-        <Stats />
+        <Why />
         <Features />
         <Walkthrough />
         <How />
         <Safety />
-        <SelfHost />
-        <Demo />
+        <GetStarted />
+        <Closing />
       </main>
       <Footer />
     </>
