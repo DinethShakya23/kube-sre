@@ -111,7 +111,7 @@ const FEATURES = [
     points: [
       'SQLite by default, or Postgres when you need more than one box',
       'A CLI for chat, digests, postmortems and replays, plus a systemd service install',
-      'API keys per role, or a password sign in for admins'
+      'Role based access: read only, operator, admin and superadmin, each with its own limits on what can change'
     ]
   }
 ];
