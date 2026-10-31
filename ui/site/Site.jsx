@@ -277,7 +277,7 @@ function Hero() {
       </div>
       <div className="s-hero-in">
         <h1 className="s-title">
-          <BlurText text="An AI SRE" className="s-title-line" delay={70} animateBy="words" direction="top" trigger="load" />
+          <BlurText text="AI SRE" className="s-title-line" delay={70} animateBy="words" direction="top" trigger="load" />
           <GradientText colors={['#8f9bff', '#4fe0cb', '#b18cff', '#8f9bff']} animationSpeed={8} className="s-title-grad">
             for Kubernetes
           </GradientText>
