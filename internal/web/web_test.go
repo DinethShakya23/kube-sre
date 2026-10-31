@@ -49,13 +49,23 @@ func TestRootRedirects(t *testing.T) {
 	}
 }
 
+// assetPath finds a built asset by pattern in index.html, since its name carries a content hash.
+func assetPath(t *testing.T, pattern string) string {
+	t.Helper()
+	m := regexp.MustCompile(pattern).FindString(serve(t, "/ui/").Body.String())
+	if m == "" {
+		t.Fatalf("index.html references no %s", pattern)
+	}
+	return m
+}
+
 func TestAssetsServed(t *testing.T) {
-	for path, want := range map[string]string{
-		"/ui/":               "text/html",
-		"/ui/assets/app.js":  "javascript",
-		"/ui/assets/app.css": "text/css",
-		"/ui/favicon.svg":    "image/svg",
-	} {
+	types := map[string]string{}
+	types["/ui/"] = "text/html"
+	types[assetPath(t, `/ui/assets/app-[^"]+\.js`)] = "javascript"
+	types[assetPath(t, `/ui/assets/app-[^"]+\.css`)] = "text/css"
+	types["/ui/favicon.svg"] = "image/svg"
+	for path, want := range types {
 		rec := serve(t, path)
 		if rec.Code != 200 {
 			t.Fatalf("%s: %d", path, rec.Code)

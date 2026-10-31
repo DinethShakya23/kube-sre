@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Builds into internal/web/static, which the Go binary embeds. Names are fixed (no-cache is
-// sent anyway) and nothing is inlined, because the CSP allows only 'self'.
+// Builds into internal/web/static, which the Go binary embeds. Names carry a content hash,
+// because a CDN in front may cache assets for hours whatever the server says; index.html is
+// never cached, so a new build is picked up at once. Nothing is inlined: the CSP allows only 'self'.
 export default defineConfig({
   base: '/ui/',
   plugins: [react()],
@@ -14,9 +15,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/app.js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: info => (info.names?.[0]?.endsWith('.css') ? 'assets/app.css' : 'assets/[name][extname]')
+        entryFileNames: 'assets/app-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: info => (info.names?.[0]?.endsWith('.css') ? 'assets/app-[hash].css' : 'assets/[name]-[hash][extname]')
       }
     }
   },

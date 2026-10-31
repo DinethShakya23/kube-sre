@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -16,8 +17,13 @@ func TestUIServedWithoutKeyButDataStillNeedsOne(t *testing.T) {
 	if resp.Header.Get("Content-Security-Policy") == "" {
 		t.Fatal("no CSP on the UI")
 	}
-	if resp, _ := r.do(t, "GET", "/ui/assets/app.js", "", nil); resp.StatusCode != 200 {
-		t.Fatalf("assets/app.js: %d", resp.StatusCode)
+	// The script's name carries a content hash, so take it from the page.
+	script := regexp.MustCompile(`/ui/assets/app-[^"]+\.js`).FindString(body)
+	if script == "" {
+		t.Fatal("the page references no app script")
+	}
+	if resp, _ := r.do(t, "GET", script, "", nil); resp.StatusCode != 200 {
+		t.Fatalf("%s: %d", script, resp.StatusCode)
 	}
 
 	for _, p := range []string{"/v1/findings", "/v1/digest", "/v1/preferences", "/v1/auth/whoami"} {
