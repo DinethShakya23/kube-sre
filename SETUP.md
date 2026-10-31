@@ -16,11 +16,11 @@ flowchart LR
 ## What you need
 
 - **Go 1.27** to build the binary.
-- **`kubectl`**, and a kubeconfig for the cluster you want kube-sre to watch.
+- **`kubectl`** and a kubeconfig for the cluster you want kube-sre to watch.
 - **An API key for a chat model** behind an OpenAI compatible API: OpenAI itself, Azure
   OpenAI, Qwen (DashScope), or any compatible gateway such as OpenRouter or LiteLLM.
 - Optional: **Prometheus** and **Loki** for metrics and logs, **Postgres** if you want more than
-  one server process, and **Docker** and **kind** if you want kube-sre to create a local test
+  one server process and **Docker** and **kind** if you want kube-sre to create a local test
   cluster for you.
 
 kube-sre runs on Linux, macOS and Windows. Running it as a background service with
@@ -46,7 +46,7 @@ the file you set in `KUBECONFIG_PATH`.
 
 **Have a cluster already?** Make sure `kubectl get pods -A` works for the user that will run
 kube-sre. A read only identity is enough to ask questions. kube-sre can only change things if
-its identity is allowed to, and even then every change waits for your approval.
+its identity is allowed to and even then every change waits for your approval.
 
 **No cluster? Make a local one** (needs Docker, kind and kubectl):
 
@@ -64,7 +64,7 @@ each app.
 kube-sre init
 ```
 
-`init` asks for your model provider and API key, writes everything to `~/.kube-sre/.env`, and
+`init` asks for your model provider and API key, writes everything to `~/.kube-sre/.env` and
 **prints an admin API key once**. Save that key somewhere safe, because the UI and the command
 line client both ask for it.
 
@@ -101,7 +101,7 @@ kube-sre serve --host 127.0.0.1 --port 8000
 ```
 
 `--host 127.0.0.1` keeps it reachable from this machine only, which is the safe default while
-you try it out. On start it creates the database schema, connects to the cluster, and starts
+you try it out. On start it creates the database schema, connects to the cluster and starts
 watching pods and events.
 
 In another terminal, check that everything is healthy:
@@ -154,7 +154,7 @@ Each person or tool gets its own API key, by role:
 |---|---|
 | `readonly` | ask questions and read everything kube-sre can see; can never change anything |
 | `operator` | also propose and (with approval) run everyday changes: scale, restart, apply |
-| `admin` | also higher risk changes such as deletes and drains (always with approval), and managing detectors |
+| `admin` | also higher risk changes such as deletes and drains (always with approval) and managing detectors |
 | `superadmin` | everything, including protected namespaces |
 
 ```bash
@@ -186,13 +186,13 @@ kube-sre set DATABASE_URL=postgres://user:pass@host:5432/kubesre
 kube-sre db-init   # create or update the schema now (serve also does it on start)
 ```
 
-Take a backup manifest beside your database backups, and check it after a restore:
+Take a backup manifest beside your database backups and check it after a restore:
 `kube-sre backup-manifest -o manifest.json`, later `kube-sre backup-verify manifest.json`.
 
 ### Put it on the internet as a public demo
 
 Only do this deliberately. In public demo mode, visitors without a key get a read only role
-with limits, and admins sign in with a password:
+with limits and admins sign in with a password:
 
 ```bash
 kube-sre admin-hash   # asks for a password (12 characters or more) and prints its hash
@@ -202,7 +202,7 @@ kube-sre set PUBLIC_DEMO_QUESTIONS_PER_HOUR=20 PUBLIC_DEMO_DAILY_BUDGET_USD=2
 
 Optionally add a Cloudflare Turnstile check before a visitor's first question
 (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`). Point the read only demo at a cluster that only
-holds demo workloads, give kube-sre a read only identity there, and use a model key with a spend
+holds demo workloads, give kube-sre a read only identity there and use a model key with a spend
 limit at the provider. [DEMO.md](DEMO.md) shows how the live demo does all of this, including
 serving it through a Cloudflare Tunnel so the server opens no ports.
 
@@ -210,8 +210,8 @@ serving it through a Cloudflare Tunnel so the server opens no ports.
 
 | What you see | What to check |
 |---|---|
-| `kube-sre status` shows the cluster as unreachable | `kubectl get pods -A` as the same user, and `KUBECONFIG_PATH` |
-| Answers say the model call failed | the API key, `OPENAI_BASE_URL`, and the model names your provider expects |
+| `kube-sre status` shows the cluster as unreachable | `kubectl get pods -A` as the same user and `KUBECONFIG_PATH` |
+| Answers say the model call failed | the API key, `OPENAI_BASE_URL` and the model names your provider expects |
 | "This server needs an API key" in the UI | paste a key from `init` or from the `KUBESRE_*_KEYS` settings |
 | The Findings page says nothing is watching | the `sensorium` block in `kube-sre health`; the cluster may be unreachable, or `SENSORIUM_ENABLED=false` |
 | Metrics or log questions say "not configured" | set `PROMETHEUS_URL` and `LOKI_URL` |

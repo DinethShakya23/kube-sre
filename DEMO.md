@@ -2,7 +2,7 @@
 
 The [live demo](https://kubesre.3wayhandshake.nl/ui/) runs kube-sre against a small Kubernetes
 cluster built to have problems. This page covers what is in that cluster, how the demo is
-hosted, how to build the same thing yourself, and how the hosted one is deployed and looked
+hosted, how to build the same thing yourself and how the hosted one is deployed and looked
 after. For how kube-sre itself works, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Commands for the hosted server use `<server>` for its SSH address, which is kept out of this
@@ -104,8 +104,8 @@ flowchart TB
   "root" only inside their sandbox. The k3s API listens on port 6443 but the firewall blocks it
   from the internet; Prometheus and Loki are forwarded to `127.0.0.1` only.
 - **Capped.** One systemd unit holds the whole cluster, every pod included: 3 GB of memory and
-  1.5 CPU cores at most, low CPU and disk priority, and it is stopped first if the server runs
-  short of memory. In practice it uses about 1.7 GB, much of it cached image layers, and about 0.7
+  1.5 CPU cores at most, low CPU and disk priority and it is stopped first if the server runs
+  short of memory. In practice it uses about 1.7 GB, much of it cached image layers and about 0.7
   of a core, mostly k3s itself plus the crash looping pods.
 
 kube-sre connects with these settings in its `.env`:
@@ -168,12 +168,12 @@ Units in `/etc/systemd/system/`: `kube-sre.service`, `kube-sre-site.service`, `k
 Each runs as `kubesre` with:
 
 - `MemoryHigh`/`MemoryMax` of 384M/512M (kube-sre), 64M/128M (site), 128M/256M (tunnel), low
-  `CPUWeight`, and a raised `OOMScoreAdjust`, so under pressure kube-sre gives way first.
+  `CPUWeight` and a raised `OOMScoreAdjust`, so under pressure kube-sre gives way first.
 - other users' home directories, `/root` and database data made inaccessible.
 - `ProtectSystem=strict` and `ProtectHome=read-only`: the binaries, the home folder and the
-  site are read only. Only kube-sre may write, and only to `.kube-sre/` and `.kube/`.
+  site are read only. Only kube-sre may write and only to `.kube-sre/` and `.kube/`.
 - `NoNewPrivileges`, an empty capability set, `PrivateTmp`, `PrivateDevices`, the kernel and
-  cgroup protections, and `SystemCallFilter=@system-service`.
+  cgroup protections and `SystemCallFilter=@system-service`.
 - Each unit is also blocked from the others' secrets: kube-sre cannot see the tunnel token,
   the site cannot see `.kube-sre/`, `.kube/` or the token, the tunnel cannot see `.kube-sre/`.
 
@@ -190,13 +190,13 @@ Rootless k3s belongs to the `kubesre-cluster` user (home `750`, no login shell).
 | `/home/kubesre-cluster/bin/` | `k3s` v1.35.5+k3s1 (with `kubectl`, `crictl`, `ctr` links) and `helm` v3.19.0 |
 | `/home/kubesre-cluster/.config/k3s/config.yaml` | Traefik and servicelb disabled, so nothing binds 80/443 |
 | `/home/kubesre-cluster/.kube/k3s.yaml` | the admin kubeconfig (stays with this user) |
-| `/home/kubesre-cluster/demo/` | the files from `examples/`: the shop, kube-sre's RBAC, and the Helm values |
+| `/home/kubesre-cluster/demo/` | the files from `examples/`: the shop, kube-sre's RBAC and the Helm values |
 
 `kubesre-cluster.service` holds the whole cluster (`Delegate=yes`): `MemoryHigh=2560M`,
-`MemoryMax=3G`, `CPUQuota=150%`, `CPUWeight=30`, `IOWeight=30`, `OOMScoreAdjust=600`, and other
+`MemoryMax=3G`, `CPUQuota=150%`, `CPUWeight=30`, `IOWeight=30`, `OOMScoreAdjust=600` and other
 users' home directories, `/root` and database data made inaccessible. Two more units,
 `kubesre-cluster-pf-prometheus` and `kubesre-cluster-pf-loki`, run the `127.0.0.1` port
-forwards, restart on their own if a pod moves, and stop with the cluster.
+forwards, restart on their own if a pod moves and stop with the cluster.
 
 To work on it, as root on the server:
 
@@ -247,7 +247,7 @@ On the server, the CD key in `/home/kubesre/.ssh/authorized_keys` is locked with
 `restrict,command="/home/kubesre/deploy/deploy.sh"`: it can do nothing but hand over a release.
 That script (`deploy/remote-deploy.sh` in this repo, installed root owned so kubesre can run it
 but not change it) takes the server's deploy lock, installs the binary and the site, stops
-kube-sre so systemd restarts it (`Restart=always`, so no sudo rule is needed), and rolls back if
+kube-sre so systemd restarts it (`Restart=always`, so no sudo rule is needed) and rolls back if
 it is not healthy within a minute.
 
 GitHub settings: secrets `DEPLOY_SSH_KEY` (the private key) and `DEPLOY_KNOWN_HOSTS` (the
@@ -261,14 +261,14 @@ sed 's/\r$//' deploy/remote-deploy.sh | ssh root@<server> 'install -o root -g ku
 ```
 
 **By hand.** Prefer re-running the workflow from the Actions tab. The server has neither Go nor
-Docker, and should not get them, so a manual build happens on any machine with Go 1.27, then
+Docker and should not get them, so a manual build happens on any machine with Go 1.27, then
 streams across:
 
 ```bash
 # 1. build (anywhere with Go, from the pushed commit)
 CGO_ENABLED=0 go build -trimpath -o kube-sre ./cmd/kube-sre
 
-# 2. install with a backup, under the deploy lock, and restart only kube-sre
+# 2. install with a backup, under the deploy lock and restart only kube-sre
 cat kube-sre | ssh root@<server> 'flock /var/lock/droplet-deploy.lock sh -c "
   cp -a /home/kubesre/bin/kube-sre /home/kubesre/bin/kube-sre.previous &&
   install -o kubesre -g kubesre -m 750 /dev/stdin /home/kubesre/bin/kube-sre.new &&
@@ -301,11 +301,11 @@ Copy `/home/kubesre/` (with an SQLite online backup of the database, never a pla
 running one), recreate the three units, start the new tunnel, then stop the old one. Both
 tunnels can run at once for a moment; Cloudflare splits traffic between them. Rebuild the demo
 cluster from `examples/` as in [Build your own](#build-your-own), mint a new kubeconfig for the
-`sre-agent/kube-sre` ServiceAccount, and keep `CLUSTER_ID` pinned.
+`sre-agent/kube-sre` ServiceAccount and keep `CLUSTER_ID` pinned.
 
 ### Notes
 
-- `METRICS_ENABLED=false` in `.env`: nothing scrapes kube-sre, and the tunnel's path rule in
+- `METRICS_ENABLED=false` in `.env`: nothing scrapes kube-sre and the tunnel's path rule in
   Cloudflare still routes `/metrics`, which made it public. It now answers 404. Remove `metrics`
   from that rule too if you ever turn it back on.
 - To replace the model API key without it ever appearing on screen, run this in your own terminal:

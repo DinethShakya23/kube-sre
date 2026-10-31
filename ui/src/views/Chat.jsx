@@ -202,7 +202,7 @@ export default function Chat({ role, cfg = {}, draft, active, openReport, notify
           <h1>Chat</h1>
           <p className="lede">
             {isPublic
-              ? 'This is a read only demo. Ask about the broken shop apps; nothing here can change the cluster.' +
+              ? 'This is a public demo, so many features are turned off on purpose. Access is read only: I can inspect pods, events, logs and metrics, but no write reaches the cluster.' +
                 (cfg.questions_per_hour ? ' You get ' + cfg.questions_per_hour + ' questions an hour.' : '')
               : 'I answer from live reads of the cluster. Any change waits for your okay.'}
           </p>
@@ -238,7 +238,7 @@ export default function Chat({ role, cfg = {}, draft, active, openReport, notify
               ))}
             </div>
             {isPublic ? (
-              <p className="small muted">This demo cluster has a few problems planted on purpose. Pick a question above or ask your own.</p>
+              <p className="small muted">The cluster runs workloads with planted faults: crash loops, image pull errors, failing readiness probes and OOM kills. Pick a question above or ask your own.</p>
             ) : (
               !canWrite(role) && <p className="small muted">Your key is read only, so I can look and explain, but I can't apply fixes for you.</p>
             )}
@@ -311,7 +311,7 @@ export default function Chat({ role, cfg = {}, draft, active, openReport, notify
               e.currentTarget.form.requestSubmit();
             }
           }}
-          placeholder={isPublic ? 'Ask why something in the shop is broken' : 'Ask about a pod, a namespace, or just say what feels off'}
+          placeholder={isPublic ? 'Ask about a pod, a namespace or a failing workload' : 'Ask about a pod, a namespace, or just say what feels off'}
           aria-label="Message"
           maxLength={maxChars || undefined}
         />
