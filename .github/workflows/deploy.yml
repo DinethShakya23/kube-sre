@@ -34,7 +34,7 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Build the web UI and the marketing site
+      - name: Build the web UI and the website
         working-directory: ui
         run: |
           npm ci --no-audit --no-fund

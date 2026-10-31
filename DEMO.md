@@ -54,7 +54,7 @@ k3s's own `coredns`, `local-path-provisioner` (the volume for Loki) and `metrics
 
 ## How it is hosted
 
-kube-sre, the marketing site and the demo cluster run on one server, each isolated, with no open
+kube-sre, the website and the demo cluster run on one server, each isolated, with no open
 ports.
 
 ```mermaid
@@ -65,7 +65,7 @@ flowchart TB
     subgraph U1["user kubesre"]
       TUN["kube-sre-tunnel<br/>cloudflared, connects out only"]
       APP["kube-sre · 127.0.0.1:8765<br/>/ui /v1 /admin /healthz /readyz"]
-      SITE["kube-sre-site · 127.0.0.1:9000<br/>marketing site"]
+      SITE["kube-sre-site · 127.0.0.1:9000<br/>website"]
     end
     subgraph U2["user kubesre-cluster · rootless k3s · own user and network namespace"]
       APIS["k3s API · 127.0.0.1:6443"]
@@ -161,7 +161,7 @@ Everything belongs to the `kubesre` user. Home is `750`; secret folders are `700
 | `/home/kubesre/.kube-sre/kube-sre.db` | SQLite: flight recorder, audit chains, memory, findings history |
 | `/home/kubesre/.kube-sre/kube-sre.kubeconfig` | the read only credentials described above |
 | `/home/kubesre/.cloudflared/token` | the tunnel token |
-| `/home/kubesre/site/` | the built marketing site (`ui/site-dist`) |
+| `/home/kubesre/site/` | the built website (`ui/site-dist`) |
 
 Units in `/etc/systemd/system/`: `kube-sre.service`, `kube-sre-site.service`, `kube-sre-tunnel.service`.
 
@@ -228,13 +228,13 @@ their unit files, `userdel -r kubesre-cluster`, then undo the three changes abov
 
 A push to `main` that touches `cmd/`, `internal/`, `ui/`, `go.mod` or `go.sum` deploys on its
 own (`.github/workflows/deploy.yml`, or run it by hand from the Actions tab). The workflow runs
-the UI checks and `go test ./...`, builds the web UI (embedded in the binary), the marketing site
+the UI checks and `go test ./...`, builds the web UI (embedded in the binary), the website
 and the binary, then pipes one tarball over SSH to the server.
 
 ```mermaid
 flowchart LR
   P([push to main]) --> T["Test<br/>UI checks, go vet, go test"]
-  T --> B["Build<br/>web UI, marketing site, binary"]
+  T --> B["Build<br/>web UI, website, binary"]
   B --> SSH["SSH, key locked to the deploy script"]
   SSH --> I["Install<br/>keep a .previous copy"]
   I --> R[Restart kube-sre]
@@ -281,7 +281,7 @@ ssh root@<server> 'curl -s 127.0.0.1:8765/healthz | head -c 200; curl -s 127.0.0
 
 To roll back: `install -m 750 /home/kubesre/bin/kube-sre.previous /home/kubesre/bin/kube-sre && systemctl restart kube-sre`.
 
-The marketing site deploys the same way: `cd ui && npm run build:site`, then copy `ui/site-dist/`
+The website deploys the same way: `cd ui && npm run build:site`, then copy `ui/site-dist/`
 into `/home/kubesre/site/` (owner `kubesre`). It is served as files, so no restart is needed.
 
 Restarting kube-sre clears the in memory Findings list (it refills as detectors fire). The

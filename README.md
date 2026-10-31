@@ -1,6 +1,6 @@
 # kube-sre
 
-**An AI SRE for Kubernetes that shows its work.**
+**An AI SRE for Kubernetes.**
 
 Ask it what's wrong with your cluster in plain English. It reads the live cluster, works out the
 root cause, shows you the evidence it used, and suggests a fix. It never changes anything until a
@@ -11,7 +11,7 @@ person says yes.
 
 Open source, self hosted, and read only by default. One Go binary with the web UI built in.
 
-🛠️ [Set it up](SETUP.md) · 📐 [How it works inside](ARCHITECTURE.md) · 🧪 [The demo: cluster, hosting and deploys](DEMO.md)
+[Set it up](SETUP.md) · [How it works inside](ARCHITECTURE.md) · [The demo: cluster, hosting and deploys](DEMO.md)
 
 ---
 
@@ -238,7 +238,7 @@ internal/
   autonomy/ cortex/  trust levels, brakes and the experimental investigation features
   api/ web/          the HTTP API, auth and public demo mode, and the embedded web UI
   store/ schema/     SQLite or Postgres, and migrations
-ui/                  the React web UI (built into internal/web/static) and ui/site, the marketing site
+ui/                  the React web UI (built into internal/web/static) and ui/site, the website
 examples/            shop.yaml, a cluster with broken apps to investigate
 deploy/              the server side of continuous deployment
 .github/workflows/   test, build and deploy on push to main
@@ -253,7 +253,7 @@ Its build is committed to `internal/web/static`, so `go build` never needs Node.
 cd ui && npm install
 npm run dev        # http://localhost:5173/ui/, talking to the server at 127.0.0.1:8765 (or $KUBESRE_URL)
 npm run build      # writes internal/web/static; commit the result
-npm run dev:site   # the marketing site in ui/site
+npm run dev:site   # the website in ui/site
 npm run build:site # writes ui/site-dist, a static folder for the domain root (not committed)
 ```
 

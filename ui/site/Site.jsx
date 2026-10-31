@@ -248,9 +248,9 @@ function Hero() {
           <ShinyText text="Open source · Self-hosted · Read only by default" color="#9aa3ba" shineColor="#ffffff" speed={3} />
         </span>
         <h1 className="s-title">
-          <BlurText text="An AI SRE for Kubernetes" className="s-title-line" delay={70} animateBy="words" direction="top" trigger="load" />
+          <BlurText text="An AI SRE" className="s-title-line" delay={70} animateBy="words" direction="top" trigger="load" />
           <GradientText colors={['#8f9bff', '#4fe0cb', '#b18cff', '#8f9bff']} animationSpeed={8} className="s-title-grad">
-            that shows its work
+            for Kubernetes
           </GradientText>
         </h1>
         <p className="s-lede">Ask it what's wrong. It reads your cluster, shows you the evidence it found, and never changes anything without your okay.</p>
@@ -462,7 +462,6 @@ function Footer() {
   return (
     <footer className="s-footer">
       <div className="s-footer-in">
-        <span>kube-sre, a Go re-implementation of an SRE agent for Kubernetes.</span>
         <a href={GITHUB} className="s-icon-link">
           <GitHubIcon /> GitHub
         </a>
