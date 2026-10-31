@@ -10,13 +10,20 @@ import { canWrite, errText, headers, newSessionId, readSSE } from '../lib/api.js
 
 const SUGGESTIONS = [
   'Is anything broken right now?',
-  'Why does checkout keep crashing?',
-  "What's wrong in the shop namespace?",
+  'Which pods are restarting the most and why?',
+  'Is any node under memory or CPU pressure?',
   'What changed in the last hour?'
 ];
 
-// The demo cluster has these apps broken on purpose.
-const PUBLIC_SUGGESTIONS = ['Why is checkout crashing?', "Why can't payments start?", 'Why is search not ready?', 'What is wrong with recommender?'];
+// Cluster wide questions the demo's planted faults can answer: restarts, OOM, probes, image pulls, replicas, quota.
+const PUBLIC_SUGGESTIONS = [
+  'Which pods are restarting the most and why?',
+  'Which containers are hitting their memory limits?',
+  'Is anything failing its readiness probes?',
+  'Are there image pull errors anywhere in the cluster?',
+  'Are all deployments running their desired replicas?',
+  'How close is the shop namespace to its resource quota?'
+];
 
 const RISK_WORD = { high: 'High risk', medium: 'Medium risk', low: 'Low risk' };
 
@@ -231,7 +238,7 @@ export default function Chat({ role, cfg = {}, draft, active, openReport, notify
               ))}
             </div>
             {isPublic ? (
-              <p className="small muted">A few apps in this demo cluster are broken on purpose. Pick one above, or ask your own question.</p>
+              <p className="small muted">This demo cluster has a few problems planted on purpose. Pick a question above or ask your own.</p>
             ) : (
               !canWrite(role) && <p className="small muted">Your key is read only, so I can look and explain, but I can't apply fixes for you.</p>
             )}
